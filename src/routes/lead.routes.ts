@@ -1,0 +1,33 @@
+import express from "express";
+import {
+  scanCard,
+  scanQRCode,
+  createLead,
+  getLeads,
+  getLeadById,
+  updateLead,
+  deleteLead,
+  getLeadStats,
+} from "../controllers/lead.controller";
+import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
+
+const router = express.Router();
+
+// All routes require authentication and ENDUSER or EXHIBITOR role
+router.use(authenticateToken);
+router.use(authorizeRoles("ENDUSER", "EXHIBITOR"));
+
+// Business card scanning route
+router.post("/scan-card", scanCard);
+// QR code scanning route (digital business card)
+router.post("/scan-qr", scanQRCode);
+
+// Lead CRUD routes
+router.post("/", createLead);
+router.get("/", getLeads);
+router.get("/stats", getLeadStats);
+router.get("/:id", getLeadById);
+router.put("/:id", updateLead);
+router.delete("/:id", deleteLead);
+
+export default router;

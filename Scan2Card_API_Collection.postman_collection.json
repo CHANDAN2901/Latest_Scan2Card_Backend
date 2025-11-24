@@ -1,0 +1,1531 @@
+{
+	"info": {
+		"name": "Scan2Card API Collection",
+		"description": "Complete API collection for Scan2Card backend application",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"version": "1.0.0"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:5000/api",
+			"type": "string"
+		},
+		{
+			"key": "authToken",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Register",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phoneNumber\": \"+1234567890\",\n  \"password\": \"password123\",\n  \"roleName\": \"EXHIBITOR\",\n  \"companyName\": \"Tech Corp\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/register",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "register"]
+						},
+						"description": "Register a new user (EXHIBITOR, ENDUSER, TEAMMANAGER)"
+					}
+				},
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "login"]
+						},
+						"description": "Login with email and password. Returns JWT token or OTP requirement."
+					}
+				},
+				{
+					"name": "Verify OTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"otp\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/verify-otp",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "verify-otp"]
+						},
+						"description": "Verify OTP for 2FA enabled accounts"
+					}
+				},
+				{
+					"name": "Get Profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/auth/profile",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "profile"]
+						},
+						"description": "Get current user profile (requires authentication)"
+					}
+				}
+			],
+			"description": "Authentication endpoints for user registration, login, and profile"
+		},
+		{
+			"name": "Admin",
+			"item": [
+				{
+					"name": "Dashboard",
+					"item": [
+						{
+							"name": "Get Dashboard Stats",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/dashboard/stats",
+									"host": ["{{baseUrl}}"],
+									"path": ["admin", "dashboard", "stats"]
+								},
+								"description": "Get dashboard statistics (total exhibitors, active events, total leads, active users)"
+							}
+						},
+						{
+							"name": "Get Events Trend",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/dashboard/trends/events?days=7",
+									"host": ["{{baseUrl}}"],
+									"path": ["admin", "dashboard", "trends", "events"],
+									"query": [
+										{
+											"key": "days",
+											"value": "7",
+											"description": "Number of days (7, 30, 90, 365)"
+										}
+									]
+								},
+								"description": "Get events created trend for specified period"
+							}
+						},
+						{
+							"name": "Get Leads Trend",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/dashboard/trends/leads?days=30",
+									"host": ["{{baseUrl}}"],
+									"path": ["admin", "dashboard", "trends", "leads"],
+									"query": [
+										{
+											"key": "days",
+											"value": "30"
+										}
+									]
+								},
+								"description": "Get leads captured trend for specified period"
+							}
+						},
+						{
+							"name": "Get License Keys Trend",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/dashboard/trends/keys?days=90",
+									"host": ["{{baseUrl}}"],
+									"path": ["admin", "dashboard", "trends", "keys"],
+									"query": [
+										{
+											"key": "days",
+											"value": "90"
+										}
+									]
+								},
+								"description": "Get license keys created trend for specified period"
+							}
+						}
+					]
+				},
+				{
+					"name": "Exhibitors",
+					"item": [
+						{
+							"name": "Create Exhibitor",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Smith\",\n  \"email\": \"jane.smith@example.com\",\n  \"phoneNumber\": \"+1234567890\",\n  \"companyName\": \"Event Solutions Inc\",\n  \"password\": \"securePass123\",\n  \"address\": \"123 Main St, City\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/admin/exhibitors",
+									"host": ["{{baseUrl}}"],
+									"path": ["admin", "exhibitors"]
+								},
+								"description": "Create a new exhibitor (auto-generates password if not provided)"
+							}
+						},
+						{
+							"name": "Get All Exhibitors",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/exhibitors?page=1&limit=10&search=",
+									"host": ["{{baseUrl}}"],
+									"path": ["admin", "exhibitors"],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "search",
+											"value": ""
+										}
+									]
+								},
+								"description": "Get paginated list of exhibitors with event counts and key counts"
+							}
+						},
+						{
+							"name": "Get Exhibitor by ID",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/exhibitors/:id",
+									"host": ["{{baseUrl}}"],
+									"path": ["admin", "exhibitors", ":id"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "exhibitorId"
+										}
+									]
+								},
+								"description": "Get single exhibitor details by ID"
+							}
+						},
+						{
+							"name": "Get Exhibitor Keys",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/exhibitors/:id/keys",
+									"host": ["{{baseUrl}}"],
+									"path": ["admin", "exhibitors", ":id", "keys"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "exhibitorId"
+										}
+									]
+								},
+								"description": "Get all license keys for a specific exhibitor with usage statistics"
+							}
+						},
+						{
+							"name": "Update Exhibitor",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Smith\",\n  \"email\": \"jane.smith@example.com\",\n  \"phoneNumber\": \"+1234567890\",\n  \"companyName\": \"Updated Company Name\",\n  \"isActive\": true\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/admin/exhibitors/:id",
+									"host": ["{{baseUrl}}"],
+									"path": ["admin", "exhibitors", ":id"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "exhibitorId"
+										}
+									]
+								},
+								"description": "Update exhibitor information"
+							}
+						},
+						{
+							"name": "Delete Exhibitor",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/exhibitors/:id",
+									"host": ["{{baseUrl}}"],
+									"path": ["admin", "exhibitors", ":id"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "exhibitorId"
+										}
+									]
+								},
+								"description": "Soft delete an exhibitor"
+							}
+						},
+						{
+							"name": "Get Top Performers",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/exhibitors/top-performers",
+									"host": ["{{baseUrl}}"],
+									"path": ["admin", "exhibitors", "top-performers"]
+								},
+								"description": "Get top performing exhibitors (most events, most keys, most key usage)"
+							}
+						}
+					]
+				}
+			],
+			"description": "Admin endpoints for managing exhibitors and viewing dashboard statistics (SUPERADMIN only)"
+		},
+		{
+			"name": "Events",
+			"item": [
+				{
+					"name": "Dashboard",
+					"item": [
+						{
+							"name": "Get Exhibitor Dashboard Stats",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/events/dashboard/stats",
+									"host": ["{{baseUrl}}"],
+									"path": ["events", "dashboard", "stats"]
+								},
+								"description": "Get exhibitor dashboard statistics (total events, active events, total leads, total keys)"
+							}
+						},
+						{
+							"name": "Get Top Events by Leads",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/events/dashboard/top-events?limit=5",
+									"host": ["{{baseUrl}}"],
+									"path": ["events", "dashboard", "top-events"],
+									"query": [
+										{
+											"key": "limit",
+											"value": "5"
+										}
+									]
+								},
+								"description": "Get top events by lead count"
+							}
+						},
+						{
+							"name": "Get Leads Trend",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/events/dashboard/leads-trend?days=7",
+									"host": ["{{baseUrl}}"],
+									"path": ["events", "dashboard", "leads-trend"],
+									"query": [
+										{
+											"key": "days",
+											"value": "7"
+										}
+									]
+								},
+								"description": "Get leads captured trend for exhibitor's events"
+							}
+						}
+					]
+				},
+				{
+					"name": "Event CRUD",
+					"item": [
+						{
+							"name": "Create Event",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"eventName\": \"Tech Conference 2024\",\n  \"description\": \"Annual technology conference\",\n  \"type\": \"Hybrid\",\n  \"startDate\": \"2024-12-01T09:00:00Z\",\n  \"endDate\": \"2024-12-03T18:00:00Z\",\n  \"location\": {\n    \"venue\": \"Convention Center\",\n    \"address\": \"123 Event Blvd\",\n    \"city\": \"San Francisco\"\n  }\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/events",
+									"host": ["{{baseUrl}}"],
+									"path": ["events"]
+								},
+								"description": "Create a new event (EXHIBITOR only)"
+							}
+						},
+						{
+							"name": "Get All Events",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/events",
+									"host": ["{{baseUrl}}"],
+									"path": ["events"]
+								},
+								"description": "Get all events for authenticated exhibitor"
+							}
+						},
+						{
+							"name": "Get Event by ID",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/events/:id",
+									"host": ["{{baseUrl}}"],
+									"path": ["events", ":id"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "eventId"
+										}
+									]
+								},
+								"description": "Get single event by ID"
+							}
+						},
+						{
+							"name": "Update Event",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"eventName\": \"Updated Event Name\",\n  \"description\": \"Updated description\",\n  \"isActive\": true\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/events/:id",
+									"host": ["{{baseUrl}}"],
+									"path": ["events", ":id"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "eventId"
+										}
+									]
+								},
+								"description": "Update event details"
+							}
+						},
+						{
+							"name": "Delete Event",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/events/:id",
+									"host": ["{{baseUrl}}"],
+									"path": ["events", ":id"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "eventId"
+										}
+									]
+								},
+								"description": "Soft delete an event"
+							}
+						}
+					]
+				},
+				{
+					"name": "License Keys",
+					"item": [
+						{
+							"name": "Generate License Key",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"stallName\": \"Booth A12\",\n  \"email\": \"team@example.com\",\n  \"maxActivations\": 10,\n  \"expiresAt\": \"2024-12-31T23:59:59Z\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/events/:id/license-keys",
+									"host": ["{{baseUrl}}"],
+									"path": ["events", ":id", "license-keys"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "eventId"
+										}
+									]
+								},
+								"description": "Generate a single license key for an event"
+							}
+						},
+						{
+							"name": "Bulk Generate License Keys",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"licenseKeys\": [\n    {\n      \"stallName\": \"Booth A1\",\n      \"email\": \"team1@example.com\",\n      \"maxActivations\": 5,\n      \"expiresAt\": \"2024-12-31T23:59:59Z\"\n    },\n    {\n      \"stallName\": \"Booth A2\",\n      \"email\": \"team2@example.com\",\n      \"maxActivations\": 10,\n      \"expiresAt\": \"2024-12-31T23:59:59Z\"\n    }\n  ]\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/events/:id/license-keys/bulk",
+									"host": ["{{baseUrl}}"],
+									"path": ["events", ":id", "license-keys", "bulk"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "eventId"
+										}
+									]
+								},
+								"description": "Bulk generate license keys from CSV data"
+							}
+						},
+						{
+							"name": "Get License Keys",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/events/:id/license-keys",
+									"host": ["{{baseUrl}}"],
+									"path": ["events", ":id", "license-keys"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "eventId"
+										}
+									]
+								},
+								"description": "Get all license keys for an event"
+							}
+						}
+					]
+				}
+			],
+			"description": "Event management endpoints for EXHIBITOR role"
+		},
+		{
+			"name": "RSVP",
+			"item": [
+				{
+					"name": "Validate License Key",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"licenseKey\": \"ABC123XYZ\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/rsvp/validate",
+							"host": ["{{baseUrl}}"],
+							"path": ["rsvp", "validate"]
+						},
+						"description": "Validate a license key before creating RSVP"
+					}
+				},
+				{
+					"name": "Create RSVP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"licenseKey\": \"ABC123XYZ\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/rsvp",
+							"host": ["{{baseUrl}}"],
+							"path": ["rsvp"]
+						},
+						"description": "Create an RSVP by registering with a license key"
+					}
+				},
+				{
+					"name": "Get My RSVPs",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/rsvp/my-rsvps",
+							"host": ["{{baseUrl}}"],
+							"path": ["rsvp", "my-rsvps"]
+						},
+						"description": "Get all RSVPs for authenticated user"
+					}
+				},
+				{
+					"name": "Get RSVP by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/rsvp/:rsvpId",
+							"host": ["{{baseUrl}}"],
+							"path": ["rsvp", ":rsvpId"],
+							"variable": [
+								{
+									"key": "rsvpId",
+									"value": "rsvpId"
+								}
+							]
+						},
+						"description": "Get single RSVP details"
+					}
+				},
+				{
+					"name": "Cancel RSVP",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/rsvp/:rsvpId",
+							"host": ["{{baseUrl}}"],
+							"path": ["rsvp", ":rsvpId"],
+							"variable": [
+								{
+									"key": "rsvpId",
+									"value": "rsvpId"
+								}
+							]
+						},
+						"description": "Cancel an RSVP"
+					}
+				},
+				{
+					"name": "Get Event RSVPs (Exhibitor)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/rsvp/event/:eventId",
+							"host": ["{{baseUrl}}"],
+							"path": ["rsvp", "event", ":eventId"],
+							"variable": [
+								{
+									"key": "eventId",
+									"value": "eventId"
+								}
+							]
+						},
+						"description": "Get all RSVPs for a specific event (EXHIBITOR only)"
+					}
+				}
+			],
+			"description": "RSVP management for event registration with license keys"
+		},
+		{
+			"name": "Leads",
+			"item": [
+				{
+					"name": "Scan Business Card",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"image\": \"data:image/jpeg;base64,/9j/4AAQSkZJRg...\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/leads/scan-card",
+							"host": ["{{baseUrl}}"],
+							"path": ["leads", "scan-card"]
+						},
+						"description": "Scan a business card image using OpenAI Vision API to extract contact information. Returns structured data that can be used to create a lead. Supports JPEG, PNG, and WebP formats (max 20MB)."
+					}
+				},
+				{
+					"name": "Create Lead",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"eventId\": \"eventId\",\n  \"isIndependentLead\": false,\n  \"scannedCardImage\": \"data:image/jpeg;base64,...\",\n  \"ocrText\": \"Extracted text from card\",\n  \"details\": {\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"email\": \"john.doe@example.com\",\n    \"phoneNumber\": \"+1234567890\",\n    \"company\": \"Acme Corp\",\n    \"position\": \"CEO\",\n    \"website\": \"https://acme.com\",\n    \"address\": \"123 Business St\",\n    \"city\": \"San Francisco\",\n    \"country\": \"USA\",\n    \"notes\": \"Interested in premium package\"\n  },\n  \"rating\": 5\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/leads",
+							"host": ["{{baseUrl}}"],
+							"path": ["leads"]
+						},
+						"description": "Create a new lead (ENDUSER or EXHIBITOR). Use scan-card endpoint first to extract data from business card image."
+					}
+				},
+				{
+					"name": "Get All Leads",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/leads",
+							"host": ["{{baseUrl}}"],
+							"path": ["leads"]
+						},
+						"description": "Get all leads for authenticated user"
+					}
+				},
+				{
+					"name": "Get Lead Stats",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/leads/stats",
+							"host": ["{{baseUrl}}"],
+							"path": ["leads", "stats"]
+						},
+						"description": "Get lead statistics"
+					}
+				},
+				{
+					"name": "Get Lead by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/leads/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["leads", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "leadId"
+								}
+							]
+						},
+						"description": "Get single lead by ID"
+					}
+				},
+				{
+					"name": "Update Lead",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@newemail.com\",\n  \"notes\": \"Updated notes\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/leads/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["leads", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "leadId"
+								}
+							]
+						},
+						"description": "Update lead information"
+					}
+				},
+				{
+					"name": "Delete Lead",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/leads/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["leads", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "leadId"
+								}
+							]
+						},
+						"description": "Soft delete a lead"
+					}
+				}
+			],
+			"description": "Lead management endpoints (ENDUSER or EXHIBITOR)"
+		},
+		{
+			"name": "Meetings",
+			"item": [
+				{
+					"name": "Create Meeting",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"leadId\": \"leadId\",\n  \"title\": \"Product Demo\",\n  \"description\": \"Demonstration of new features\",\n  \"scheduledAt\": \"2024-12-15T10:00:00Z\",\n  \"location\": \"Conference Room A\",\n  \"duration\": 60\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/meetings",
+							"host": ["{{baseUrl}}"],
+							"path": ["meetings"]
+						},
+						"description": "Create a new meeting (ENDUSER only)"
+					}
+				},
+				{
+					"name": "Get All Meetings",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/meetings",
+							"host": ["{{baseUrl}}"],
+							"path": ["meetings"]
+						},
+						"description": "Get all meetings for authenticated user"
+					}
+				},
+				{
+					"name": "Get Meeting by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/meetings/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["meetings", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "meetingId"
+								}
+							]
+						},
+						"description": "Get single meeting by ID"
+					}
+				},
+				{
+					"name": "Update Meeting",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Updated Meeting Title\",\n  \"scheduledAt\": \"2024-12-15T14:00:00Z\",\n  \"status\": \"Confirmed\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/meetings/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["meetings", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "meetingId"
+								}
+							]
+						},
+						"description": "Update meeting details"
+					}
+				},
+				{
+					"name": "Delete Meeting",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/meetings/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["meetings", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "meetingId"
+								}
+							]
+						},
+						"description": "Delete a meeting"
+					}
+				}
+			],
+			"description": "Meeting management endpoints (ENDUSER only)"
+		},
+		{
+			"name": "Profile",
+			"item": [
+				{
+					"name": "Update Profile",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"phoneNumber\": \"+1234567890\",\n  \"companyName\": \"Tech Corp\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/profile",
+							"host": ["{{baseUrl}}"],
+							"path": ["profile"]
+						},
+						"description": "Update user profile information"
+					}
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"currentPassword\": \"oldPassword123\",\n  \"newPassword\": \"newPassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/profile/change-password",
+							"host": ["{{baseUrl}}"],
+							"path": ["profile", "change-password"]
+						},
+						"description": "Change user password"
+					}
+				},
+				{
+					"name": "Toggle 2FA",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"enable\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/profile/toggle-2fa",
+							"host": ["{{baseUrl}}"],
+							"path": ["profile", "toggle-2fa"]
+						},
+						"description": "Enable or disable two-factor authentication"
+					}
+				},
+				{
+					"name": "Submit Feedback",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"category\": \"Bug\",\n  \"message\": \"Found an issue with the dashboard\",\n  \"priority\": \"Medium\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/profile/feedback",
+							"host": ["{{baseUrl}}"],
+							"path": ["profile", "feedback"]
+						},
+						"description": "Submit user feedback"
+					}
+				},
+				{
+					"name": "Get My Feedback",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/profile/feedback",
+							"host": ["{{baseUrl}}"],
+							"path": ["profile", "feedback"]
+						},
+						"description": "Get user's feedback history"
+					}
+				}
+			],
+			"description": "User profile management endpoints"
+		},
+		{
+			"name": "Feedback (Admin)",
+			"item": [
+				{
+					"name": "Get All Feedback",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/feedback?page=1&limit=10&category=Bug&status=Pending",
+							"host": ["{{baseUrl}}"],
+							"path": ["feedback"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								},
+								{
+									"key": "category",
+									"value": "Bug",
+									"description": "Bug, Feature, Improvement, Other"
+								},
+								{
+									"key": "status",
+									"value": "Pending",
+									"description": "Pending, InProgress, Resolved, Closed"
+								}
+							]
+						},
+						"description": "Get all feedback with filters (SUPERADMIN only)"
+					}
+				},
+				{
+					"name": "Get Feedback Stats",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/feedback/stats",
+							"host": ["{{baseUrl}}"],
+							"path": ["feedback", "stats"]
+						},
+						"description": "Get feedback statistics (SUPERADMIN only)"
+					}
+				},
+				{
+					"name": "Update Feedback Status",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"Resolved\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/feedback/:id/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["feedback", ":id", "status"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "feedbackId"
+								}
+							]
+						},
+						"description": "Update feedback status (SUPERADMIN only)"
+					}
+				}
+			],
+			"description": "Feedback management for administrators (SUPERADMIN only)"
+		},
+		{
+			"name": "Team Manager",
+			"item": [
+				{
+					"name": "Get Dashboard Stats",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/team-manager/dashboard/stats",
+							"host": ["{{baseUrl}}"],
+							"path": ["team-manager", "dashboard", "stats"]
+						},
+						"description": "Get team manager dashboard statistics"
+					}
+				},
+				{
+					"name": "Get Leads Graph",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/team-manager/leads/graph?days=7",
+							"host": ["{{baseUrl}}"],
+							"path": ["team-manager", "leads", "graph"],
+							"query": [
+								{
+									"key": "days",
+									"value": "7"
+								}
+							]
+						},
+						"description": "Get leads trend graph for team"
+					}
+				},
+				{
+					"name": "Get All Leads",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/team-manager/leads/all",
+							"host": ["{{baseUrl}}"],
+							"path": ["team-manager", "leads", "all"]
+						},
+						"description": "Get all leads for team manager's team"
+					}
+				},
+				{
+					"name": "Get Team Members",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/team-manager/team/members",
+							"host": ["{{baseUrl}}"],
+							"path": ["team-manager", "team", "members"]
+						},
+						"description": "Get all team members under this manager"
+					}
+				},
+				{
+					"name": "Get Member Leads",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/team-manager/team/member/:memberId/leads",
+							"host": ["{{baseUrl}}"],
+							"path": ["team-manager", "team", "member", ":memberId", "leads"],
+							"variable": [
+								{
+									"key": "memberId",
+									"value": "memberId"
+								}
+							]
+						},
+						"description": "Get leads for a specific team member"
+					}
+				},
+				{
+					"name": "Get My Events",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/team-manager/events",
+							"host": ["{{baseUrl}}"],
+							"path": ["team-manager", "events"]
+						},
+						"description": "Get events managed by this team manager"
+					}
+				},
+				{
+					"name": "Get Team Meetings",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/team-manager/meetings/team",
+							"host": ["{{baseUrl}}"],
+							"path": ["team-manager", "meetings", "team"]
+						},
+						"description": "Get all meetings for team members"
+					}
+				}
+			],
+			"description": "Team manager endpoints for managing team and viewing team performance (TEAMMANAGER only)"
+		},
+		{
+			"name": "Health Check",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:5000/health",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "5000",
+					"path": ["health"]
+				},
+				"description": "Check API health status"
+			}
+		}
+	]
+}

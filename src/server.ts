@@ -1,0 +1,83 @@
+import express, { Application, Request, Response } from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { connectToMongooseDatabase } from "./config/db.config";
+import { seedRoles } from "./services/role.service";
+import authRoutes from "./routes/auth.routes";
+import adminRoutes from "./routes/admin.routes";
+import eventRoutes from "./routes/event.routes";
+import rsvpRoutes from "./routes/rsvp.routes";
+import leadRoutes from "./routes/lead.routes";
+import meetingRoutes from "./routes/meeting.routes";
+import profileRoutes from "./routes/profile.routes";
+import feedbackRoutes from "./routes/feedback.routes";
+import teamManagerRoutes from "./routes/teamManager.routes";
+
+// Load environment variables
+dotenv.config();
+
+const app: Application = express();
+const PORT = process.env.PORT || 5000;
+
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: '10mb' })); // Allow up to 10MB for image uploads
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// API Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/events", eventRoutes);
+app.use("/api/rsvp", rsvpRoutes);
+app.use("/api/leads", leadRoutes);
+app.use("/api/meetings", meetingRoutes);
+app.use("/api/profile", profileRoutes);
+app.use("/api/feedback", feedbackRoutes);
+app.use("/api/team-manager", teamManagerRoutes);
+
+// Health check route
+app.get("/health", (req: Request, res: Response) => {
+  res.status(200).json({
+    status: "OK",
+    message: "Scan2Card Backend is running",
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Root route
+app.get("/", (req: Request, res: Response) => {
+  res.status(200).json({
+    message: "Welcome to Scan2Card API",
+    version: "1.0.0"
+  });
+});
+
+// Initialize database and seed roles
+const initializeApp = async () => {
+  try {
+    // Connect to database
+    await connectToMongooseDatabase();
+
+    // Seed default roles
+    await seedRoles();
+
+    console.log("✅ App initialized successfully");
+  } catch (error) {
+    console.error("❌ App initialization failed:", error);
+    process.exit(1);
+  }
+};
+
+// Start server
+const startServer = async () => {
+  await initializeApp();
+
+  app.listen(PORT, () => {
+    console.log(`🚀 Server is running on port ${PORT}`);
+    console.log(`📍 Health check: http://localhost:${PORT}/health`);
+  });
+};
+
+startServer();
+
+export default app;
