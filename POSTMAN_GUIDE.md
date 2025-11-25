@@ -81,7 +81,8 @@ Manage exhibitors and view system-wide analytics:
 - Create Exhibitor
 - Get All Exhibitors (with pagination & search)
 - Get Exhibitor by ID
-- **Get Exhibitor Keys** - View all license keys with usage stats ⭐ NEW
+- **Get Exhibitor Keys** - View all license keys with usage stats
+- **Update License Key Payment Status** - Change payment status (pending/completed) ⭐ NEW
 - Update Exhibitor
 - Delete Exhibitor (soft delete)
 - Get Top Performers
@@ -181,14 +182,32 @@ Team performance and management:
 3. Create RSVP with valid key
 4. View "My RSVPs"
 
-### Workflow 3: Admin View Exhibitor Keys ⭐ NEW
+### Workflow 3: Admin View Exhibitor Keys
 1. Login as SUPERADMIN
 2. Get All Exhibitors
 3. Note the exhibitor's `_id` and `keyCount`
 4. Use "Get Exhibitor Keys" with exhibitor ID
 5. View detailed usage statistics for all keys
 
-### Workflow 4: Business Card Scanning & Lead Creation ⭐ NEW
+### Workflow 3.1: Update License Key Payment Status ⭐ NEW
+1. Login as SUPERADMIN
+2. Get Exhibitor Keys for a specific exhibitor
+3. Note the `eventId` and `_id` (keyId) from the key you want to update
+4. Use "Update License Key Payment Status" endpoint:
+   ```json
+   PUT /admin/events/:eventId/keys/:keyId/payment-status
+   {
+     "paymentStatus": "completed"
+   }
+   ```
+5. Payment status will be updated (pending → completed or vice versa)
+6. Refresh exhibitor keys to verify the change
+
+**Available Payment Statuses:**
+- `pending` - Payment not yet received (default)
+- `completed` - Payment received and confirmed
+
+### Workflow 4: Business Card Scanning & Lead Creation
 1. Login as ENDUSER or EXHIBITOR
 2. Convert business card image to base64
 3. Use "Scan Business Card" endpoint

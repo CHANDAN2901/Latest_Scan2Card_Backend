@@ -594,9 +594,12 @@ export const getExhibitorKeys = async (req: Request, res: Response) => {
           usedCount: key.usedCount,
           isActive: key.isActive,
           expiresAt: key.expiresAt,
+          paymentStatus: key.paymentStatus || "pending",
           eventName: event.eventName,
           eventId: event._id,
           usagePercentage: Math.round((key.usedCount / key.maxActivations) * 100),
+          createdAt: key.createdAt,
+          updatedAt: key.updatedAt,
         });
       });
     });
@@ -624,6 +627,66 @@ export const getExhibitorKeys = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to retrieve exhibitor keys",
+    });
+  }
+};
+
+// Update Payment Status for a License Key
+export const updateKeyPaymentStatus = async (req: Request, res: Response) => {
+  try {
+    const { eventId, keyId } = req.params;
+    const { paymentStatus } = req.body;
+
+    // Validate payment status
+    if (!paymentStatus || !["pending", "completed"].includes(paymentStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment status. Must be 'pending' or 'completed'",
+      });
+    }
+
+    // Update payment status using $set to avoid full document validation
+    const updatedEvent = await EventModel.findOneAndUpdate(
+      {
+        _id: eventId,
+        isDeleted: false,
+        "licenseKeys._id": keyId
+      },
+      {
+        $set: { "licenseKeys.$.paymentStatus": paymentStatus }
+      },
+      {
+        new: true,
+        runValidators: false // Skip validation to avoid issues with existing data
+      }
+    );
+
+    if (!updatedEvent) {
+      return res.status(404).json({
+        success: false,
+        message: "Event or license key not found",
+      });
+    }
+
+    // Find the updated key to return in response
+    const updatedKey = updatedEvent.licenseKeys.find(
+      (key) => key._id?.toString() === keyId
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `Payment status updated to ${paymentStatus}`,
+      data: {
+        keyId: updatedKey?._id,
+        key: updatedKey?.key,
+        paymentStatus: updatedKey?.paymentStatus,
+      },
+    });
+  } catch (error: any) {
+    console.error("❌ Update payment status error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to update payment status",
     });
   }
 };

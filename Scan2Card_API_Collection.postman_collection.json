@@ -317,6 +317,42 @@
 							}
 						},
 						{
+							"name": "Update License Key Payment Status",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"paymentStatus\": \"completed\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/admin/events/:eventId/keys/:keyId/payment-status",
+									"host": ["{{baseUrl}}"],
+									"path": ["admin", "events", ":eventId", "keys", ":keyId", "payment-status"],
+									"variable": [
+										{
+											"key": "eventId",
+											"value": "eventId"
+										},
+										{
+											"key": "keyId",
+											"value": "keyId"
+										}
+									]
+								},
+								"description": "Update payment status for a license key (Only SUPERADMIN). Values: 'pending' or 'completed'"
+							}
+						},
+						{
 							"name": "Update Exhibitor",
 							"request": {
 								"method": "PUT",

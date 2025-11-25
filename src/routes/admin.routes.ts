@@ -10,7 +10,8 @@ import {
   getLeadsTrend,
   getLicenseKeysTrend,
   getTopPerformers,
-  getExhibitorKeys
+  getExhibitorKeys,
+  updateKeyPaymentStatus
 } from "../controllers/admin.controller";
 import { authenticateToken, AuthRequest } from "../middleware/auth.middleware";
 
@@ -38,5 +39,8 @@ router.get("/exhibitors/:id", authenticateToken, ensureSuperAdmin, getExhibitorB
 router.get("/exhibitors/:id/keys", authenticateToken, ensureSuperAdmin, getExhibitorKeys);
 router.put("/exhibitors/:id", authenticateToken, ensureSuperAdmin, updateExhibitor);
 router.delete("/exhibitors/:id", authenticateToken, ensureSuperAdmin, deleteExhibitor);
+
+// License Key Payment Status
+router.put("/events/:eventId/keys/:keyId/payment-status", authenticateToken, ensureSuperAdmin, updateKeyPaymentStatus);
 
 export default router;

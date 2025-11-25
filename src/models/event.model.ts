@@ -13,6 +13,9 @@ export interface ILicenseKey {
   maxActivations: number;
   usedCount: number;
   usedBy: Types.ObjectId[];
+  paymentStatus: "pending" | "completed";
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 // Event Interface
@@ -47,17 +50,21 @@ const EventSchema = new Schema<IEvent>(
       city: { type: String },
     },
     licenseKeys: [
-      {
-        key: { type: String, required: true },
-        stallName: { type: String },
-        email: { type: String, required: true },
-        teamManagerId: { type: Schema.Types.ObjectId, ref: "Users" },
-        expiresAt: { type: Date, required: true },
-        isActive: { type: Boolean, default: true },
-        maxActivations: { type: Number, default: 1 },
-        usedCount: { type: Number, default: 0 },
-        usedBy: [{ type: Schema.Types.ObjectId, ref: "Users" }],
-      },
+      new Schema(
+        {
+          key: { type: String, required: true },
+          stallName: { type: String },
+          email: { type: String, required: true },
+          teamManagerId: { type: Schema.Types.ObjectId, ref: "Users" },
+          expiresAt: { type: Date, required: true },
+          isActive: { type: Boolean, default: true },
+          maxActivations: { type: Number, default: 1 },
+          usedCount: { type: Number, default: 0 },
+          usedBy: [{ type: Schema.Types.ObjectId, ref: "Users" }],
+          paymentStatus: { type: String, enum: ["pending", "completed"], default: "pending" },
+        },
+        { timestamps: true }
+      ),
     ],
     exhibitorId: { type: Schema.Types.ObjectId, ref: "Users", required: true },
     isActive: { type: Boolean, default: true },
