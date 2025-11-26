@@ -12,6 +12,7 @@ import meetingRoutes from "./routes/meeting.routes";
 import profileRoutes from "./routes/profile.routes";
 import feedbackRoutes from "./routes/feedback.routes";
 import teamManagerRoutes from "./routes/teamManager.routes";
+import keepServerActive from "./cron/serverActive";
 
 // Load environment variables
 dotenv.config();
@@ -23,6 +24,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); // Allow up to 10MB for image uploads
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
 
 // API Routes
 app.use("/api/auth", authRoutes);
@@ -79,5 +81,6 @@ const startServer = async () => {
 };
 
 startServer();
+keepServerActive();
 
 export default app;
