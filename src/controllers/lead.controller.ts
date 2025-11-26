@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import LeadModel from "../models/leads.model";
+import mongoose from "mongoose";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { scanBusinessCard } from "../services/businessCardScanner.service";
 import { processQRCode } from "../services/qrCodeProcessor.service";
@@ -136,7 +137,7 @@ export const getLeads = async (req: AuthRequest, res: Response) => {
         exhibitorId: userId,
         isDeleted: false,
       }).select("_id");
-      
+
       const eventIds = exhibitorEvents.map((event) => event._id);
       filter.eventId = { $in: eventIds };
     } else {
@@ -425,3 +426,124 @@ export const scanQRCode = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+// Get Lead Analytics (Day-wise and Month-wise)
+export const getLeadAnalytics = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+    const { timeZone = "UTC" } = req.query;
+
+    // 1. Last 30 Days (Day-wise)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    console.log(`[Analytics] Fetching for User: ${userId}, Role: ${userRole}, TimeZone: ${timeZone}`);
+
+    let matchStage: any = {
+      isDeleted: false,
+      createdAt: { $gte: thirtyDaysAgo },
+    };
+
+    if (userRole === "EXHIBITOR") {
+      const EventModel = (await import("../models/event.model")).default;
+      const exhibitorEvents = await EventModel.find({
+        exhibitorId: userId,
+        isDeleted: false,
+      }).select("_id");
+
+      const eventIds = exhibitorEvents.map((event) => event._id);
+      matchStage.eventId = { $in: eventIds };
+    } else {
+      matchStage.userId = new mongoose.Types.ObjectId(userId);
+    }
+
+    const dailyStats = await LeadModel.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: timeZone as string },
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    console.log('[Analytics] Raw Daily Stats:', JSON.stringify(dailyStats));
+
+    // 2. Last 12 Months (Month-wise)
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
+    twelveMonthsAgo.setDate(1); // Start from the 1st of that month
+
+    // Adjust match stage for monthly
+    const monthlyMatchStage = { ...matchStage };
+    monthlyMatchStage.createdAt = { $gte: twelveMonthsAgo };
+
+    const monthlyStats = await LeadModel.aggregate([
+      { $match: monthlyMatchStage },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m", date: "$createdAt", timezone: timeZone as string },
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    // Fill in missing dates/months with 0 counts
+    const filledDailyStats = fillMissingDates(dailyStats, 30);
+    const filledMonthlyStats = fillMissingMonths(monthlyStats, 12);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        daily: filledDailyStats,
+        monthly: filledMonthlyStats,
+      },
+    });
+  } catch (error: any) {
+    console.error("Error fetching lead analytics:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Helper to fill missing dates
+function fillMissingDates(data: any[], days: number) {
+  const result = [];
+  const map = new Map(data.map((item) => [item._id, item.count]));
+
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split("T")[0];
+    result.push({
+      date: dateStr,
+      count: map.get(dateStr) || 0,
+    });
+  }
+  return result;
+}
+
+// Helper to fill missing months
+function fillMissingMonths(data: any[], months: number) {
+  const result = [];
+  const map = new Map(data.map((item) => [item._id, item.count]));
+
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setMonth(d.getMonth() - i);
+    const monthStr = d.toISOString().slice(0, 7); // YYYY-MM
+    result.push({
+      month: monthStr,
+      count: map.get(monthStr) || 0,
+    });
+  }
+  return result;
+}

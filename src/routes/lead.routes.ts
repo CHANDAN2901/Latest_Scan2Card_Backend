@@ -8,6 +8,7 @@ import {
   updateLead,
   deleteLead,
   getLeadStats,
+  getLeadAnalytics,
 } from "../controllers/lead.controller";
 import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
 
@@ -25,6 +26,7 @@ router.post("/scan-qr", scanQRCode);
 // Lead CRUD routes
 router.post("/", createLead);
 router.get("/", getLeads);
+router.get("/analytics", getLeadAnalytics);
 router.get("/stats", getLeadStats);
 router.get("/:id", getLeadById);
 router.put("/:id", updateLead);
