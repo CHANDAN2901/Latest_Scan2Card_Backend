@@ -16,6 +16,7 @@ export interface IUser extends Document {
   profileImage?: string;
   addedBy?: Types.ObjectId;
   twoFactorEnabled: boolean;
+  isVerified: boolean;
   isActive: boolean;
   isDeleted: boolean;
   createdAt?: Date;
@@ -38,6 +39,7 @@ const UserSchema = new Schema<IUser>(
     profileImage: { type: String },
     addedBy: { type: Schema.Types.ObjectId, ref: "Users" },
     twoFactorEnabled: { type: Boolean, default: false },
+    isVerified: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false },
   },

@@ -77,14 +77,102 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"otp\": \"123456\"\n}"
+							"raw": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"otp\": \"000000\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/verify-otp",
 							"host": ["{{baseUrl}}"],
 							"path": ["auth", "verify-otp"]
 						},
-						"description": "Verify OTP for 2FA enabled accounts"
+						"description": "Verify OTP for 2FA enabled accounts (Test OTP: 000000)"
+					}
+				},
+				{
+					"name": "Send Verification OTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"phoneNumber\": \"+1234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/send-verification-otp",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "send-verification-otp"]
+						},
+						"description": "Send OTP for user verification. Required after registration to verify the account. (Test OTP: 000000)"
+					}
+				},
+				{
+					"name": "Verify User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"otp\": \"000000\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/verify-user",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "verify-user"]
+						},
+						"description": "Verify user with OTP. Sets isVerified to true. (Test OTP: 000000)"
+					}
+				},
+				{
+					"name": "Forgot Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"john.doe@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/forgot-password",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "forgot-password"]
+						},
+						"description": "Request password reset OTP. Returns userId for next step. (Test OTP: 000000)"
+					}
+				},
+				{
+					"name": "Reset Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"otp\": \"000000\",\n  \"newPassword\": \"NewPassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/reset-password",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "reset-password"]
+						},
+						"description": "Reset password with OTP. Requires userId from forgot-password step. (Test OTP: 000000)"
 					}
 				},
 				{

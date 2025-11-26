@@ -70,6 +70,7 @@ export const registerUser = async (data: RegisterUserDTO) => {
       phoneNumber: newUser.phoneNumber,
       role: (newUser.role as any).name, // Just return role name
       companyName: newUser.companyName,
+      isVerified: newUser.isVerified,
     },
   };
 };
@@ -121,6 +122,7 @@ export const loginUser = async (data: LoginData) => {
       role: (user.role as any).name, // Just return role name
       companyName: user.companyName,
       twoFactorEnabled: user.twoFactorEnabled,
+      isVerified: user.isVerified,
     },
   };
 };
@@ -154,5 +156,6 @@ export const getUserById = async (userId: string) => {
     companyName: user.companyName,
     isActive: user.isActive,
     twoFactorEnabled: user.twoFactorEnabled,
+    isVerified: user.isVerified,
   };
 };

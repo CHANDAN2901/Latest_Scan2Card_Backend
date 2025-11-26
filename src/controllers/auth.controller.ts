@@ -234,3 +234,252 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+// Send verification OTP to user's phone/email
+export const sendVerificationOTP = async (req: Request, res: Response) => {
+  try {
+    const { userId, phoneNumber } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
+    // Find user
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Check if user is already verified
+    if (user.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "User is already verified",
+      });
+    }
+
+    // Update phone number if provided
+    if (phoneNumber && phoneNumber !== user.phoneNumber) {
+      user.phoneNumber = phoneNumber;
+      await user.save();
+    }
+
+    // Generate OTP (using dummy OTP "000000" for testing)
+    const otp = "000000";
+
+    // Save OTP to database (expires in 10 minutes)
+    await OTPModel.create({
+      userId: user._id,
+      otp,
+      purpose: "verification",
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    console.log(`📱 VERIFICATION OTP for ${user.email}: ${otp}`);
+
+    res.status(200).json({
+      success: true,
+      message: "Verification OTP sent successfully",
+      data: {
+        userId: user._id,
+        phoneNumber: user.phoneNumber,
+        email: user.email,
+      },
+    });
+  } catch (error: any) {
+    console.error("❌ Send verification OTP error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to send verification OTP",
+    });
+  }
+};
+
+// Verify user with OTP
+export const verifyUserOTP = async (req: Request, res: Response) => {
+  try {
+    const { userId, otp } = req.body;
+
+    if (!userId || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID and OTP are required",
+      });
+    }
+
+    // Find valid OTP
+    const otpRecord = await OTPModel.findOne({
+      userId,
+      otp,
+      purpose: "verification",
+      isUsed: false,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!otpRecord) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired OTP",
+      });
+    }
+
+    // Mark OTP as used
+    otpRecord.isUsed = true;
+    await otpRecord.save();
+
+    // Update user's isVerified status
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    user.isVerified = true;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "User verified successfully",
+      data: {
+        userId: user._id,
+        isVerified: user.isVerified,
+      },
+    });
+  } catch (error: any) {
+    console.error("❌ Verify user OTP error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "User verification failed",
+    });
+  }
+};
+
+// Forgot password - Send OTP
+export const forgotPassword = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    // Find user by email
+    const user = await UserModel.findOne({ email, isDeleted: false });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User with this email does not exist",
+      });
+    }
+
+    // Generate OTP (using dummy OTP "000000" for testing)
+    const otp = "000000";
+
+    // Save OTP to database (expires in 10 minutes)
+    await OTPModel.create({
+      userId: user._id,
+      otp,
+      purpose: "forgot_password",
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    console.log(`🔑 FORGOT PASSWORD OTP for ${email}: ${otp}`);
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset OTP sent successfully",
+      data: {
+        userId: user._id,
+        email: user.email,
+      },
+    });
+  } catch (error: any) {
+    console.error("❌ Forgot password error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to send password reset OTP",
+    });
+  }
+};
+
+// Reset password with OTP
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { userId, otp, newPassword } = req.body;
+
+    // Validation
+    if (!userId || !otp || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID, OTP, and new password are required",
+      });
+    }
+
+    // Password validation (minimum 6 characters)
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters long",
+      });
+    }
+
+    // Find valid OTP
+    const otpRecord = await OTPModel.findOne({
+      userId,
+      otp,
+      purpose: "forgot_password",
+      isUsed: false,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!otpRecord) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired OTP",
+      });
+    }
+
+    // Mark OTP as used
+    otpRecord.isUsed = true;
+    await otpRecord.save();
+
+    // Find user and update password
+    const user = await UserModel.findById(userId).select("+password");
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully",
+      data: {
+        email: user.email,
+      },
+    });
+  } catch (error: any) {
+    console.error("❌ Reset password error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Password reset failed",
+    });
+  }
+};

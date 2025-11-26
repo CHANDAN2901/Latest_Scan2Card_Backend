@@ -3,7 +3,7 @@ import { Schema, Document, model, Types } from "mongoose";
 export interface IOTP extends Document {
   userId: Types.ObjectId;
   otp: string;
-  purpose: "login" | "enable_2fa" | "disable_2fa";
+  purpose: "login" | "enable_2fa" | "disable_2fa" | "verification" | "forgot_password";
   expiresAt: Date;
   isUsed: boolean;
 }
@@ -12,7 +12,7 @@ const OTPSchema = new Schema<IOTP>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "Users", required: true },
     otp: { type: String, required: true },
-    purpose: { type: String, enum: ["login", "enable_2fa", "disable_2fa"], required: true },
+    purpose: { type: String, enum: ["login", "enable_2fa", "disable_2fa", "verification", "forgot_password"], required: true },
     expiresAt: { type: Date, required: true },
     isUsed: { type: Boolean, default: false },
   },
