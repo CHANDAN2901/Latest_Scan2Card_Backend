@@ -154,7 +154,7 @@
 					}
 				},
 				{
-					"name": "Reset Password",
+					"name": "Reset Password (Forgot Password Flow)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -172,7 +172,33 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["auth", "reset-password"]
 						},
-						"description": "Reset password with OTP. Requires userId from forgot-password step. (Test OTP: 000000)"
+						"description": "Reset password with OTP for users who forgot their password. Requires userId from forgot-password step. (Test OTP: 000000)"
+					}
+				},
+				{
+					"name": "Change Password (Authenticated)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"currentPassword\": \"OldPassword123\",\n  \"newPassword\": \"NewPassword456\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/change-password",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "change-password"]
+						},
+						"description": "Change password for logged-in users. Requires authentication token and current password verification. No OTP needed."
 					}
 				},
 				{

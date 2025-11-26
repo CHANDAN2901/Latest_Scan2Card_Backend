@@ -7,7 +7,8 @@ import {
   sendVerificationOTP,
   verifyUserOTP,
   forgotPassword,
-  resetPassword
+  resetPasswordWithOTP,
+  changePassword
 } from "../controllers/auth.controller";
 import { authenticateToken } from "../middleware/auth.middleware";
 
@@ -22,11 +23,12 @@ router.post("/verify-otp", verifyLoginOTP);
 router.post("/send-verification-otp", sendVerificationOTP);
 router.post("/verify-user", verifyUserOTP);
 
-// Password reset routes
+// Password reset routes (forgot password)
 router.post("/forgot-password", forgotPassword);
-router.post("/reset-password", resetPassword);
+router.post("/reset-password", resetPasswordWithOTP);
 
 // Protected routes
 router.get("/profile", authenticateToken, getProfile);
+router.post("/change-password", authenticateToken, changePassword);
 
 export default router;

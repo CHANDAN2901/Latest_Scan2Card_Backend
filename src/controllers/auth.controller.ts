@@ -413,8 +413,8 @@ export const forgotPassword = async (req: Request, res: Response) => {
   }
 };
 
-// Reset password with OTP
-export const resetPassword = async (req: Request, res: Response) => {
+// Reset password with OTP (for forgot password flow)
+export const resetPasswordWithOTP = async (req: Request, res: Response) => {
   try {
     const { userId, otp, newPassword } = req.body;
 
@@ -480,6 +480,81 @@ export const resetPassword = async (req: Request, res: Response) => {
     res.status(400).json({
       success: false,
       message: error.message || "Password reset failed",
+    });
+  }
+};
+
+// Change password (for logged-in users)
+export const changePassword = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    // Validation
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password and new password are required",
+      });
+    }
+
+    // Password validation (minimum 6 characters)
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters long",
+      });
+    }
+
+    // Check if new password is same as current
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be different from current password",
+      });
+    }
+
+    // Find user with password
+    const user = await UserModel.findById(req.user.userId).select("+password");
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: "Current password is incorrect",
+      });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Password changed successfully",
+      data: {
+        email: user.email,
+      },
+    });
+  } catch (error: any) {
+    console.error("❌ Change password error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Password change failed",
     });
   }
 };
