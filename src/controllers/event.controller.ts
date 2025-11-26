@@ -386,6 +386,7 @@ export const generateLicenseKeyForEvent = async (req: AuthRequest, res: Response
       maxActivations: Number(maxActivations),
       usedCount: 0,
       usedBy: [],
+      paymentStatus: "pending",
     });
 
     await event.save();
@@ -496,6 +497,7 @@ export const bulkGenerateLicenseKeys = async (req: AuthRequest, res: Response) =
           maxActivations: Number(maxActivations),
           usedCount: 0,
           usedBy: [],
+          paymentStatus: "pending",
         });
 
         generatedKeys.push({

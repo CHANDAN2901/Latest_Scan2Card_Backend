@@ -12,6 +12,7 @@ export interface RegisterUserDTO {
   companyName?: string;
   password: string;
   roleName: "SUPERADMIN" | "EXHIBITOR" | "TEAMMANAGER" | "ENDUSER";
+  exhibitorId?: string;
 }
 
 interface LoginData {
