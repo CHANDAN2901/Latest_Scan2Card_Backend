@@ -10,6 +10,7 @@ import {
   getLeadStats,
   getLeadAnalytics,
 } from "../controllers/lead.controller";
+import leadExportController from "../controllers/leadExport.controller";
 import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
 
 const router = express.Router();
@@ -28,6 +29,7 @@ router.post("/", createLead);
 router.get("/", getLeads);
 router.get("/analytics", getLeadAnalytics);
 router.get("/stats", getLeadStats);
+router.get("/export", leadExportController.exportLeads);
 router.get("/:id", getLeadById);
 router.put("/:id", updateLead);
 router.delete("/:id", deleteLead);
