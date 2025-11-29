@@ -21,9 +21,11 @@ export interface ILead extends Document {
   userId: Types.ObjectId;
   eventId?: Types.ObjectId;
   isIndependentLead: boolean;
-  scannedCardImage: string;
+  leadType: "full_scan" | "entry_code" | "manual"; // Type of lead capture
+  scannedCardImage?: string; // Optional - not required for entry_code type
+  entryCode?: string; // Entry code from organizational QR cards
   ocrText?: string;
-  details: ILeadDetails;
+  details?: ILeadDetails;
   rating?: number;
   isActive: boolean;
   isDeleted: boolean;
@@ -35,7 +37,14 @@ const LeadSchema = new Schema<ILead>(
     userId: { type: Schema.Types.ObjectId, ref: "Users", required: true },
     eventId: { type: Schema.Types.ObjectId, ref: "Events" },
     isIndependentLead: { type: Boolean, default: false },
-    scannedCardImage: { type: String, required: true },
+    leadType: {
+      type: String,
+      enum: ["full_scan", "entry_code", "manual"],
+      default: "full_scan",
+      required: true,
+    },
+    scannedCardImage: { type: String }, // No longer required
+    entryCode: { type: String }, // Entry code from organizational QR cards
     ocrText: { type: String },
     details: {
       firstName: { type: String },

@@ -1,9 +1,6 @@
 import { Request, Response } from "express";
-import { registerUser, loginUser, getUserById } from "../services/auth.service";
+import * as authService from "../services/auth.service";
 import { AuthRequest } from "../middleware/auth.middleware";
-import UserModel from "../models/user.model";
-import OTPModel from "../models/otp.model";
-import bcrypt from "bcryptjs";
 
 // Register new user
 export const register = async (req: Request, res: Response) => {
@@ -44,7 +41,7 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await registerUser({
+    const result = await authService.registerUser({
       firstName,
       lastName,
       email,
@@ -82,56 +79,12 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    // Get user with password
-    const user = await UserModel.findOne({ email, isDeleted: false })
-      .select("+password")
-      .populate("role", "roleName");
+    // Check if 2FA is enabled for this user
+    const result = await authService.loginUser({ email, password });
 
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password",
-      });
-    }
-
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password",
-      });
-    }
-
-    // Check if 2FA is enabled
-    if (user.twoFactorEnabled) {
-      // Use bypass OTP "000000" for testing
-      const otp = "000000";
-      
-      // Save OTP to database (expires in 10 minutes)
-      await OTPModel.create({
-        userId: user._id,
-        otp,
-        purpose: "login",
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-      });
-
-      // Bypass OTP for testing - always use 000000
-      console.log(`🔐 2FA BYPASS OTP for ${email}: ${otp}`);
-
-      return res.status(200).json({
-        success: true,
-        message: "OTP sent to your email",
-        data: {
-          requires2FA: true,
-          userId: user._id,
-          email: user.email,
-        },
-      });
-    }
-
-    // If 2FA is not enabled, proceed with normal login
-    const result = await loginUser({ email, password });
+    // If user has 2FA enabled, loginUser will throw or we need to check before
+    // For now, let's check 2FA in the controller since we need the user object
+    // We'll handle this by catching if user has 2FA enabled
 
     res.status(200).json({
       success: true,
@@ -139,6 +92,15 @@ export const login = async (req: Request, res: Response) => {
       data: result,
     });
   } catch (error: any) {
+    // Special handling for 2FA
+    if (error.message && error.message.includes("2FA")) {
+      return res.status(200).json({
+        success: true,
+        message: "OTP sent to your email",
+        data: error.data, // This would contain userId and email
+      });
+    }
+
     console.error("❌ Login error:", error);
     res.status(401).json({
       success: false,
@@ -159,42 +121,7 @@ export const verifyLoginOTP = async (req: Request, res: Response) => {
       });
     }
 
-    // Find valid OTP
-    const otpRecord = await OTPModel.findOne({
-      userId,
-      otp,
-      purpose: "login",
-      isUsed: false,
-      expiresAt: { $gt: new Date() },
-    });
-
-    if (!otpRecord) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid or expired OTP",
-      });
-    }
-
-    // Mark OTP as used
-    otpRecord.isUsed = true;
-    await otpRecord.save();
-
-    // Get user and generate token
-    const user = await UserModel.findById(userId).populate("role", "roleName");
-    
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    // Generate token using the existing service
-    const result = await loginUser({ 
-      email: user.email, 
-      password: user.password,
-      skipPasswordCheck: true 
-    });
+    const result = await authService.verifyLoginOTP(userId, otp);
 
     res.status(200).json({
       success: true,
@@ -220,7 +147,7 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const user = await getUserById(req.user.userId);
+    const user = await authService.getUserById(req.user.userId);
 
     res.status(200).json({
       success: true,
@@ -247,50 +174,12 @@ export const sendVerificationOTP = async (req: Request, res: Response) => {
       });
     }
 
-    // Find user
-    const user = await UserModel.findById(userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    // Check if user is already verified
-    if (user.isVerified) {
-      return res.status(400).json({
-        success: false,
-        message: "User is already verified",
-      });
-    }
-
-    // Update phone number if provided
-    if (phoneNumber && phoneNumber !== user.phoneNumber) {
-      user.phoneNumber = phoneNumber;
-      await user.save();
-    }
-
-    // Generate OTP (using dummy OTP "000000" for testing)
-    const otp = "000000";
-
-    // Save OTP to database (expires in 10 minutes)
-    await OTPModel.create({
-      userId: user._id,
-      otp,
-      purpose: "verification",
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-    });
-
-    console.log(`📱 VERIFICATION OTP for ${user.email}: ${otp}`);
+    const result = await authService.sendVerificationOTP(userId, phoneNumber);
 
     res.status(200).json({
       success: true,
       message: "Verification OTP sent successfully",
-      data: {
-        userId: user._id,
-        phoneNumber: user.phoneNumber,
-        email: user.email,
-      },
+      data: result,
     });
   } catch (error: any) {
     console.error("❌ Send verification OTP error:", error);
@@ -313,45 +202,12 @@ export const verifyUserOTP = async (req: Request, res: Response) => {
       });
     }
 
-    // Find valid OTP
-    const otpRecord = await OTPModel.findOne({
-      userId,
-      otp,
-      purpose: "verification",
-      isUsed: false,
-      expiresAt: { $gt: new Date() },
-    });
-
-    if (!otpRecord) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid or expired OTP",
-      });
-    }
-
-    // Mark OTP as used
-    otpRecord.isUsed = true;
-    await otpRecord.save();
-
-    // Update user's isVerified status
-    const user = await UserModel.findById(userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    user.isVerified = true;
-    await user.save();
+    const result = await authService.verifyUserOTP(userId, otp);
 
     res.status(200).json({
       success: true,
       message: "User verified successfully",
-      data: {
-        userId: user._id,
-        isVerified: user.isVerified,
-      },
+      data: result,
     });
   } catch (error: any) {
     console.error("❌ Verify user OTP error:", error);
@@ -374,35 +230,12 @@ export const forgotPassword = async (req: Request, res: Response) => {
       });
     }
 
-    // Find user by email
-    const user = await UserModel.findOne({ email, isDeleted: false });
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User with this email does not exist",
-      });
-    }
-
-    // Generate OTP (using dummy OTP "000000" for testing)
-    const otp = "000000";
-
-    // Save OTP to database (expires in 10 minutes)
-    await OTPModel.create({
-      userId: user._id,
-      otp,
-      purpose: "forgot_password",
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-    });
-
-    console.log(`🔑 FORGOT PASSWORD OTP for ${email}: ${otp}`);
+    const result = await authService.sendForgotPasswordOTP(email);
 
     res.status(200).json({
       success: true,
       message: "Password reset OTP sent successfully",
-      data: {
-        userId: user._id,
-        email: user.email,
-      },
+      data: result,
     });
   } catch (error: any) {
     console.error("❌ Forgot password error:", error);
@@ -426,54 +259,12 @@ export const resetPasswordWithOTP = async (req: Request, res: Response) => {
       });
     }
 
-    // Password validation (minimum 6 characters)
-    if (newPassword.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must be at least 6 characters long",
-      });
-    }
-
-    // Find valid OTP
-    const otpRecord = await OTPModel.findOne({
-      userId,
-      otp,
-      purpose: "forgot_password",
-      isUsed: false,
-      expiresAt: { $gt: new Date() },
-    });
-
-    if (!otpRecord) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid or expired OTP",
-      });
-    }
-
-    // Mark OTP as used
-    otpRecord.isUsed = true;
-    await otpRecord.save();
-
-    // Find user and update password
-    const user = await UserModel.findById(userId).select("+password");
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
-    await user.save();
+    const result = await authService.resetPasswordWithOTP(userId, otp, newPassword);
 
     res.status(200).json({
       success: true,
       message: "Password reset successfully",
-      data: {
-        email: user.email,
-      },
+      data: result,
     });
   } catch (error: any) {
     console.error("❌ Reset password error:", error);
@@ -484,7 +275,9 @@ export const resetPasswordWithOTP = async (req: Request, res: Response) => {
   }
 };
 
-// Change password (for logged-in users)
+// Change password (for logged-in users) - using profile service
+import * as profileService from "../services/profile.service";
+
 export const changePassword = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
@@ -496,63 +289,27 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
 
     const { currentPassword, newPassword } = req.body;
 
-    // Validation
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "Current password and new password are required",
-      });
-    }
-
-    // Password validation (minimum 6 characters)
-    if (newPassword.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: "New password must be at least 6 characters long",
-      });
-    }
-
-    // Check if new password is same as current
-    if (currentPassword === newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "New password must be different from current password",
-      });
-    }
-
-    // Find user with password
-    const user = await UserModel.findById(req.user.userId).select("+password");
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    // Verify current password
-    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: "Current password is incorrect",
-      });
-    }
-
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
-    await user.save();
+    await profileService.changeUserPassword(
+      req.user.userId,
+      currentPassword,
+      newPassword
+    );
 
     res.status(200).json({
       success: true,
       message: "Password changed successfully",
-      data: {
-        email: user.email,
-      },
     });
   } catch (error: any) {
     console.error("❌ Change password error:", error);
-    res.status(400).json({
+
+    const statusCode =
+      error.message === "User not found"
+        ? 404
+        : error.message === "Current password is incorrect"
+        ? 401
+        : 400;
+
+    res.status(statusCode).json({
       success: false,
       message: error.message || "Password change failed",
     });

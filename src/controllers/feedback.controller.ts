@@ -1,6 +1,6 @@
 import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
-import FeedbackModel from "../models/feedback.model";
+import * as feedbackService from "../services/feedback.service";
 
 // Get all feedback (Admin only)
 export const getAllFeedback = async (req: AuthRequest, res: Response) => {
@@ -10,28 +10,16 @@ export const getAllFeedback = async (req: AuthRequest, res: Response) => {
     const status = req.query.status as string;
     const category = req.query.category as string;
 
-    const query: any = { isDeleted: false };
-    if (status) query.status = status;
-    if (category) query.category = category;
-
-    const feedbacks = await FeedbackModel.paginate(query, {
+    const result = await feedbackService.getAllFeedback({
       page,
       limit,
-      sort: { createdAt: -1 },
-      populate: { path: "userId", select: "firstName lastName email role companyName" },
+      status,
+      category,
     });
 
     res.status(200).json({
       success: true,
-      data: {
-        feedbacks: feedbacks.docs,
-        pagination: {
-          total: feedbacks.totalDocs,
-          page: feedbacks.page,
-          pages: feedbacks.totalPages,
-          limit: feedbacks.limit,
-        },
-      },
+      data: result,
     });
   } catch (error: any) {
     console.error("❌ Get all feedback error:", error);
@@ -48,25 +36,7 @@ export const updateFeedbackStatus = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    if (!status || !["pending", "reviewed", "resolved"].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid status is required (pending, reviewed, resolved)",
-      });
-    }
-
-    const feedback = await FeedbackModel.findByIdAndUpdate(
-      id,
-      { status },
-      { new: true }
-    ).populate("userId", "firstName lastName email");
-
-    if (!feedback) {
-      return res.status(404).json({
-        success: false,
-        message: "Feedback not found",
-      });
-    }
+    const feedback = await feedbackService.updateFeedbackStatus(id, status);
 
     res.status(200).json({
       success: true,
@@ -75,6 +45,14 @@ export const updateFeedbackStatus = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error("❌ Update feedback status error:", error);
+
+    if (error.message === "Feedback not found") {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     res.status(400).json({
       success: false,
       message: error.message || "Failed to update feedback status",
@@ -85,30 +63,11 @@ export const updateFeedbackStatus = async (req: AuthRequest, res: Response) => {
 // Get feedback statistics (Admin only)
 export const getFeedbackStats = async (req: AuthRequest, res: Response) => {
   try {
-    const [total, pending, reviewed, resolved] = await Promise.all([
-      FeedbackModel.countDocuments({ isDeleted: false }),
-      FeedbackModel.countDocuments({ isDeleted: false, status: "pending" }),
-      FeedbackModel.countDocuments({ isDeleted: false, status: "reviewed" }),
-      FeedbackModel.countDocuments({ isDeleted: false, status: "resolved" }),
-    ]);
-
-    const byCategory = await FeedbackModel.aggregate([
-      { $match: { isDeleted: false } },
-      { $group: { _id: "$category", count: { $sum: 1 } } },
-    ]);
+    const stats = await feedbackService.getFeedbackStats();
 
     res.status(200).json({
       success: true,
-      data: {
-        total,
-        pending,
-        reviewed,
-        resolved,
-        byCategory: byCategory.reduce((acc, item) => {
-          acc[item._id] = item.count;
-          return acc;
-        }, {} as Record<string, number>),
-      },
+      data: stats,
     });
   } catch (error: any) {
     console.error("❌ Get feedback stats error:", error);

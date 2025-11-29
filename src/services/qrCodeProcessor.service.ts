@@ -22,9 +22,10 @@ export interface QRContactData {
 // Interface for QR processing result
 export interface QRProcessResult {
   success: boolean;
-  type: "url" | "vcard" | "plaintext";
+  type: "url" | "vcard" | "plaintext" | "entry_code";
   data?: {
-    details: QRContactData;
+    details?: QRContactData;
+    entryCode?: string;
     rawData: string;
     confidence: number;
   };
@@ -48,6 +49,32 @@ const isURL = (text: string): boolean => {
  */
 const isVCard = (text: string): boolean => {
   return text.trim().startsWith("BEGIN:VCARD") && text.includes("END:VCARD");
+};
+
+/**
+ * Detects if text is just an entry code (short alphanumeric code)
+ * Entry codes are typically short (3-30 chars), alphanumeric, and don't contain contact info
+ */
+const isEntryCode = (text: string): boolean => {
+  const trimmed = text.trim();
+
+  // Must be between 3 and 30 characters
+  if (trimmed.length < 3 || trimmed.length > 30) {
+    return false;
+  }
+
+  // Should not contain spaces, newlines, or special characters except hyphen/underscore
+  if (!/^[A-Za-z0-9\-_]+$/.test(trimmed)) {
+    return false;
+  }
+
+  // Should not look like a URL, email, or phone number
+  if (trimmed.includes('.') || trimmed.includes('@') || trimmed.includes('/')) {
+    return false;
+  }
+
+  // If it matches these criteria, it's likely an entry code
+  return true;
 };
 
 /**
@@ -379,6 +406,20 @@ export const processQRCode = async (
     }
 
     const trimmedText = qrText.trim();
+
+    // Check if it's an entry code (do this first as it's the simplest)
+    if (isEntryCode(trimmedText)) {
+      console.log("🎫 Detected entry code in QR code");
+      return {
+        success: true,
+        type: "entry_code",
+        data: {
+          entryCode: trimmedText,
+          rawData: trimmedText,
+          confidence: 1.0,
+        },
+      };
+    }
 
     // Check if it's a URL
     if (isURL(trimmedText)) {

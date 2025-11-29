@@ -1,9 +1,8 @@
-import { Request, Response } from "express";
-import LeadModel from "../models/leads.model";
-import mongoose from "mongoose";
+import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { scanBusinessCard } from "../services/businessCardScanner.service";
 import { processQRCode } from "../services/qrCodeProcessor.service";
+import * as leadService from "../services/lead.service";
 
 // Scan Business Card
 export const scanCard = async (req: AuthRequest, res: Response) => {
@@ -66,34 +65,39 @@ export const createLead = async (req: AuthRequest, res: Response) => {
     const {
       eventId,
       isIndependentLead,
+      leadType = "full_scan",
       scannedCardImage,
+      entryCode,
       ocrText,
       details,
       rating,
     } = req.body;
     const userId = req.user?.userId;
 
-    // Validation
-    if (!scannedCardImage) {
-      return res.status(400).json({
-        success: false,
-        message: "scannedCardImage is required",
-      });
+    // Validation based on lead type
+    if (leadType === "entry_code") {
+      if (!entryCode) {
+        return res.status(400).json({
+          success: false,
+          message: "Entry code is required for entry code type leads",
+        });
+      }
+    } else if (leadType === "full_scan") {
+      if (!scannedCardImage) {
+        return res.status(400).json({
+          success: false,
+          message: "Scanned card image is required for full scan type leads",
+        });
+      }
     }
 
-    // Validate rating if provided
-    if (rating && (rating < 1 || rating > 5)) {
-      return res.status(400).json({
-        success: false,
-        message: "Rating must be between 1 and 5",
-      });
-    }
-
-    const lead = await LeadModel.create({
-      userId,
+    const lead = await leadService.createLead({
+      userId: userId!,
       eventId,
-      isIndependentLead: isIndependentLead || !eventId,
+      isIndependentLead,
+      leadType,
       scannedCardImage,
+      entryCode,
       ocrText,
       details,
       rating,
@@ -127,70 +131,21 @@ export const getLeads = async (req: AuthRequest, res: Response) => {
       search,
     } = req.query;
 
-    // Build filter query based on role
-    let filter: any = { isDeleted: false };
-
-    if (userRole === "EXHIBITOR") {
-      // For exhibitors, get leads from their events
-      const EventModel = (await import("../models/event.model")).default;
-      const exhibitorEvents = await EventModel.find({
-        exhibitorId: userId,
-        isDeleted: false,
-      }).select("_id");
-
-      const eventIds = exhibitorEvents.map((event) => event._id);
-      filter.eventId = { $in: eventIds };
-    } else {
-      // For end users, only show their own leads
-      filter.userId = userId;
-    }
-
-    if (eventId) {
-      filter.eventId = eventId;
-    }
-
-    if (isIndependentLead !== undefined) {
-      filter.isIndependentLead = isIndependentLead === "true";
-    }
-
-    if (rating) {
-      filter.rating = parseInt(rating as string);
-    }
-
-    // Search in details
-    if (search) {
-      filter.$or = [
-        { "details.firstName": { $regex: search, $options: "i" } },
-        { "details.lastName": { $regex: search, $options: "i" } },
-        { "details.company": { $regex: search, $options: "i" } },
-        { "details.email": { $regex: search, $options: "i" } },
-        { "details.phoneNumber": { $regex: search, $options: "i" } },
-      ];
-    }
-
-    const options = {
-      page: parseInt(page as string),
-      limit: parseInt(limit as string),
-      sort: { createdAt: 1 }, // Ascending order (oldest first)
-      populate: [
-        { path: "eventId", select: "eventName type startDate endDate" },
-        { path: "userId", select: "firstName lastName email" },
-      ],
-    };
-
-    const leads = await LeadModel.paginate(filter, options);
+    const result = await leadService.getLeads({
+      userId: userId!,
+      userRole: userRole!,
+      page: Number(page),
+      limit: Number(limit),
+      eventId: eventId as string,
+      isIndependentLead: isIndependentLead as string,
+      rating: rating as string,
+      search: search as string,
+    });
 
     return res.status(200).json({
       success: true,
-      data: leads.docs,
-      pagination: {
-        total: leads.totalDocs,
-        page: leads.page,
-        limit: leads.limit,
-        totalPages: leads.totalPages,
-        hasNextPage: leads.hasNextPage,
-        hasPrevPage: leads.hasPrevPage,
-      },
+      data: result.leads,
+      pagination: result.pagination,
     });
   } catch (error: any) {
     console.error("Error fetching leads:", error);
@@ -207,20 +162,7 @@ export const getLeadById = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.userId;
 
-    const lead = await LeadModel.findOne({
-      _id: id,
-      userId,
-      isDeleted: false,
-    })
-      .populate("eventId", "eventName type startDate endDate")
-      .populate("userId", "firstName lastName email");
-
-    if (!lead) {
-      return res.status(404).json({
-        success: false,
-        message: "Lead not found",
-      });
-    }
+    const lead = await leadService.getLeadById(id, userId!);
 
     return res.status(200).json({
       success: true,
@@ -228,7 +170,7 @@ export const getLeadById = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error("Error fetching lead:", error);
-    return res.status(500).json({
+    return res.status(error.message === "Lead not found" ? 404 : 500).json({
       success: false,
       message: error.message || "Internal server error",
     });
@@ -243,46 +185,26 @@ export const updateLead = async (req: AuthRequest, res: Response) => {
     const {
       eventId,
       isIndependentLead,
+      leadType,
       scannedCardImage,
+      entryCode,
       ocrText,
       details,
       rating,
       isActive,
     } = req.body;
 
-    // Validate rating if provided
-    if (rating && (rating < 1 || rating > 5)) {
-      return res.status(400).json({
-        success: false,
-        message: "Rating must be between 1 and 5",
-      });
-    }
-
-    const lead = await LeadModel.findOne({
-      _id: id,
-      userId,
-      isDeleted: false,
+    const lead = await leadService.updateLead(id, userId!, {
+      eventId,
+      isIndependentLead,
+      leadType,
+      scannedCardImage,
+      entryCode,
+      ocrText,
+      details,
+      rating,
+      isActive,
     });
-
-    if (!lead) {
-      return res.status(404).json({
-        success: false,
-        message: "Lead not found",
-      });
-    }
-
-    // Update fields
-    if (eventId !== undefined) lead.eventId = eventId;
-    if (isIndependentLead !== undefined)
-      lead.isIndependentLead = isIndependentLead;
-    if (scannedCardImage !== undefined)
-      lead.scannedCardImage = scannedCardImage;
-    if (ocrText !== undefined) lead.ocrText = ocrText;
-    if (details !== undefined) lead.details = { ...lead.details, ...details };
-    if (rating !== undefined) lead.rating = rating;
-    if (isActive !== undefined) lead.isActive = isActive;
-
-    await lead.save();
 
     return res.status(200).json({
       success: true,
@@ -291,7 +213,7 @@ export const updateLead = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error("Error updating lead:", error);
-    return res.status(500).json({
+    return res.status(error.message === "Lead not found" ? 404 : 500).json({
       success: false,
       message: error.message || "Internal server error",
     });
@@ -304,22 +226,7 @@ export const deleteLead = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.userId;
 
-    const lead = await LeadModel.findOne({
-      _id: id,
-      userId,
-      isDeleted: false,
-    });
-
-    if (!lead) {
-      return res.status(404).json({
-        success: false,
-        message: "Lead not found",
-      });
-    }
-
-    lead.isDeleted = true;
-    lead.isActive = false;
-    await lead.save();
+    await leadService.deleteLead(id, userId!);
 
     return res.status(200).json({
       success: true,
@@ -327,7 +234,7 @@ export const deleteLead = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error("Error deleting lead:", error);
-    return res.status(500).json({
+    return res.status(error.message === "Lead not found" ? 404 : 500).json({
       success: false,
       message: error.message || "Internal server error",
     });
@@ -339,42 +246,11 @@ export const getLeadStats = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
 
-    const totalLeads = await LeadModel.countDocuments({
-      userId,
-      isDeleted: false,
-    });
-    const activeLeads = await LeadModel.countDocuments({
-      userId,
-      isActive: true,
-      isDeleted: false,
-    });
-    const independentLeads = await LeadModel.countDocuments({
-      userId,
-      isIndependentLead: true,
-      isDeleted: false,
-    });
-    const eventLeads = await LeadModel.countDocuments({
-      userId,
-      isIndependentLead: false,
-      isDeleted: false,
-    });
-
-    // Rating distribution
-    const ratingStats = await LeadModel.aggregate([
-      { $match: { userId: userId, isDeleted: false, rating: { $exists: true } } },
-      { $group: { _id: "$rating", count: { $sum: 1 } } },
-      { $sort: { _id: 1 } },
-    ]);
+    const stats = await leadService.getLeadStats(userId!);
 
     return res.status(200).json({
       success: true,
-      data: {
-        totalLeads,
-        activeLeads,
-        independentLeads,
-        eventLeads,
-        ratingDistribution: ratingStats,
-      },
+      data: stats,
     });
   } catch (error: any) {
     console.error("Error fetching lead stats:", error);
@@ -410,13 +286,31 @@ export const scanQRCode = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Return the extracted data
+    // Return the extracted data based on type
+    if (result.type === "entry_code") {
+      return res.status(200).json({
+        success: true,
+        message: "Entry code detected successfully",
+        leadType: "entry_code",
+        data: {
+          entryCode: result.data?.entryCode,
+          rawData: result.data?.rawData,
+          confidence: result.data?.confidence,
+        },
+      });
+    }
+
+    // For other types (url, vcard, plaintext)
     return res.status(200).json({
       success: true,
       message: "QR code processed successfully",
-      data: result.data,
+      leadType: "full_scan",
+      data: {
+        details: result.data?.details,
+        rawData: result.data?.rawData,
+        confidence: result.data?.confidence,
+      },
       type: result.type,
-      confidence: result.data?.confidence,
     });
   } catch (error: any) {
     console.error("❌ Error scanning QR code:", error);
@@ -426,6 +320,7 @@ export const scanQRCode = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
 // Get Lead Analytics (Day-wise and Month-wise)
 export const getLeadAnalytics = async (req: AuthRequest, res: Response) => {
   try {
@@ -433,77 +328,15 @@ export const getLeadAnalytics = async (req: AuthRequest, res: Response) => {
     const userRole = req.user?.role;
     const { timeZone = "UTC" } = req.query;
 
-    // 1. Last 30 Days (Day-wise)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    console.log(`[Analytics] Fetching for User: ${userId}, Role: ${userRole}, TimeZone: ${timeZone}`);
-
-    let matchStage: any = {
-      isDeleted: false,
-      createdAt: { $gte: thirtyDaysAgo },
-    };
-
-    if (userRole === "EXHIBITOR") {
-      const EventModel = (await import("../models/event.model")).default;
-      const exhibitorEvents = await EventModel.find({
-        exhibitorId: userId,
-        isDeleted: false,
-      }).select("_id");
-
-      const eventIds = exhibitorEvents.map((event) => event._id);
-      matchStage.eventId = { $in: eventIds };
-    } else {
-      matchStage.userId = new mongoose.Types.ObjectId(userId);
-    }
-
-    const dailyStats = await LeadModel.aggregate([
-      { $match: matchStage },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: timeZone as string },
-          },
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]);
-
-    console.log('[Analytics] Raw Daily Stats:', JSON.stringify(dailyStats));
-
-    // 2. Last 12 Months (Month-wise)
-    const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
-    twelveMonthsAgo.setDate(1); // Start from the 1st of that month
-
-    // Adjust match stage for monthly
-    const monthlyMatchStage = { ...matchStage };
-    monthlyMatchStage.createdAt = { $gte: twelveMonthsAgo };
-
-    const monthlyStats = await LeadModel.aggregate([
-      { $match: monthlyMatchStage },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m", date: "$createdAt", timezone: timeZone as string },
-          },
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]);
-
-    // Fill in missing dates/months with 0 counts
-    const filledDailyStats = fillMissingDates(dailyStats, 30);
-    const filledMonthlyStats = fillMissingMonths(monthlyStats, 12);
+    const analytics = await leadService.getLeadAnalytics(
+      userId!,
+      userRole!,
+      timeZone as string
+    );
 
     return res.status(200).json({
       success: true,
-      data: {
-        daily: filledDailyStats,
-        monthly: filledMonthlyStats,
-      },
+      data: analytics,
     });
   } catch (error: any) {
     console.error("Error fetching lead analytics:", error);
@@ -513,37 +346,3 @@ export const getLeadAnalytics = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-
-// Helper to fill missing dates
-function fillMissingDates(data: any[], days: number) {
-  const result = [];
-  const map = new Map(data.map((item) => [item._id, item.count]));
-
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split("T")[0];
-    result.push({
-      date: dateStr,
-      count: map.get(dateStr) || 0,
-    });
-  }
-  return result;
-}
-
-// Helper to fill missing months
-function fillMissingMonths(data: any[], months: number) {
-  const result = [];
-  const map = new Map(data.map((item) => [item._id, item.count]));
-
-  for (let i = months - 1; i >= 0; i--) {
-    const d = new Date();
-    d.setMonth(d.getMonth() - i);
-    const monthStr = d.toISOString().slice(0, 7); // YYYY-MM
-    result.push({
-      month: monthStr,
-      count: map.get(monthStr) || 0,
-    });
-  }
-  return result;
-}

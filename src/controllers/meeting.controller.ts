@@ -1,7 +1,6 @@
 import { Response } from "express";
-import MeetingModel from "../models/meeting.model";
 import { AuthRequest } from "../middleware/auth.middleware";
-import LeadModel from "../models/leads.model";
+import * as meetingService from "../services/meeting.service";
 
 // Create Meeting
 export const createMeeting = async (req: AuthRequest, res: Response) => {
@@ -28,22 +27,8 @@ export const createMeeting = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Verify lead exists and belongs to user
-    const lead = await LeadModel.findOne({
-      _id: leadId,
-      userId,
-      isDeleted: false,
-    });
-
-    if (!lead) {
-      return res.status(404).json({
-        success: false,
-        message: "Lead not found or access denied",
-      });
-    }
-
-    const meeting = await MeetingModel.create({
-      userId,
+    const meeting = await meetingService.createMeeting({
+      userId: userId!,
       leadId,
       eventId,
       title,
@@ -53,13 +38,8 @@ export const createMeeting = async (req: AuthRequest, res: Response) => {
       startTime,
       endTime,
       location,
-      notifyAttendees: notifyAttendees || false,
+      notifyAttendees,
     });
-
-    await meeting.populate([
-      { path: "leadId", select: "details scannedCardImage" },
-      { path: "eventId", select: "eventName" },
-    ]);
 
     return res.status(201).json({
       success: true,
@@ -88,48 +68,20 @@ export const getMeetings = async (req: AuthRequest, res: Response) => {
       meetingMode,
     } = req.query;
 
-    // Build filter query
-    const filter: any = { userId, isDeleted: false };
-
-    if (leadId) {
-      filter.leadId = leadId;
-    }
-
-    if (eventId) {
-      filter.eventId = eventId;
-    }
-
-    if (meetingStatus) {
-      filter.meetingStatus = meetingStatus;
-    }
-
-    if (meetingMode) {
-      filter.meetingMode = meetingMode;
-    }
-
-    const options = {
-      page: parseInt(page as string),
-      limit: parseInt(limit as string),
-      sort: { date: 1, startTime: 1 }, // Ascending order (earliest first)
-      populate: [
-        { path: "leadId", select: "details scannedCardImage" },
-        { path: "eventId", select: "eventName type startDate endDate" },
-      ],
-    };
-
-    const meetings = await MeetingModel.paginate(filter, options);
+    const result = await meetingService.getMeetings({
+      userId: userId!,
+      leadId: leadId as string,
+      eventId: eventId as string,
+      meetingStatus: meetingStatus as string,
+      meetingMode: meetingMode as string,
+      page: Number(page),
+      limit: Number(limit),
+    });
 
     return res.status(200).json({
       success: true,
-      data: meetings.docs,
-      pagination: {
-        total: meetings.totalDocs,
-        page: meetings.page,
-        limit: meetings.limit,
-        totalPages: meetings.totalPages,
-        hasNextPage: meetings.hasNextPage,
-        hasPrevPage: meetings.hasPrevPage,
-      },
+      data: result.meetings,
+      pagination: result.pagination,
     });
   } catch (error: any) {
     console.error("❌ Get meetings error:", error);
@@ -146,20 +98,7 @@ export const getMeetingById = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.userId;
 
-    const meeting = await MeetingModel.findOne({
-      _id: id,
-      userId,
-      isDeleted: false,
-    })
-      .populate("leadId", "details scannedCardImage")
-      .populate("eventId", "eventName type startDate endDate");
-
-    if (!meeting) {
-      return res.status(404).json({
-        success: false,
-        message: "Meeting not found",
-      });
-    }
+    const meeting = await meetingService.getMeetingById(id, userId!);
 
     return res.status(200).json({
       success: true,
@@ -167,7 +106,7 @@ export const getMeetingById = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error("❌ Get meeting by ID error:", error);
-    return res.status(500).json({
+    return res.status(error.message === "Meeting not found" ? 404 : 500).json({
       success: false,
       message: error.message || "Failed to retrieve meeting",
     });
@@ -192,37 +131,18 @@ export const updateMeeting = async (req: AuthRequest, res: Response) => {
       isActive,
     } = req.body;
 
-    const meeting = await MeetingModel.findOne({
-      _id: id,
-      userId,
-      isDeleted: false,
+    const meeting = await meetingService.updateMeeting(id, userId!, {
+      title,
+      description,
+      meetingMode,
+      meetingStatus,
+      date: date ? new Date(date) : undefined,
+      startTime,
+      endTime,
+      location,
+      notifyAttendees,
+      isActive,
     });
-
-    if (!meeting) {
-      return res.status(404).json({
-        success: false,
-        message: "Meeting not found",
-      });
-    }
-
-    // Update fields
-    if (title !== undefined) meeting.title = title;
-    if (description !== undefined) meeting.description = description;
-    if (meetingMode !== undefined) meeting.meetingMode = meetingMode;
-    if (meetingStatus !== undefined) meeting.meetingStatus = meetingStatus;
-    if (date !== undefined) meeting.date = new Date(date);
-    if (startTime !== undefined) meeting.startTime = startTime;
-    if (endTime !== undefined) meeting.endTime = endTime;
-    if (location !== undefined) meeting.location = location;
-    if (notifyAttendees !== undefined) meeting.notifyAttendees = notifyAttendees;
-    if (typeof isActive === "boolean") meeting.isActive = isActive;
-
-    await meeting.save();
-
-    await meeting.populate([
-      { path: "leadId", select: "details scannedCardImage" },
-      { path: "eventId", select: "eventName" },
-    ]);
 
     return res.status(200).json({
       success: true,
@@ -231,7 +151,7 @@ export const updateMeeting = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error("❌ Update meeting error:", error);
-    return res.status(500).json({
+    return res.status(error.message === "Meeting not found" ? 404 : 500).json({
       success: false,
       message: error.message || "Failed to update meeting",
     });
@@ -244,21 +164,7 @@ export const deleteMeeting = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.userId;
 
-    const meeting = await MeetingModel.findOne({
-      _id: id,
-      userId,
-      isDeleted: false,
-    });
-
-    if (!meeting) {
-      return res.status(404).json({
-        success: false,
-        message: "Meeting not found",
-      });
-    }
-
-    meeting.isDeleted = true;
-    await meeting.save();
+    await meetingService.deleteMeeting(id, userId!);
 
     return res.status(200).json({
       success: true,
@@ -266,7 +172,7 @@ export const deleteMeeting = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error("❌ Delete meeting error:", error);
-    return res.status(500).json({
+    return res.status(error.message === "Meeting not found" ? 404 : 500).json({
       success: false,
       message: error.message || "Failed to delete meeting",
     });

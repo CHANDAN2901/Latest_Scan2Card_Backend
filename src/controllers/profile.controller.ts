@@ -1,9 +1,7 @@
 import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
-import UserModel from "../models/user.model";
-import FeedbackModel from "../models/feedback.model";
-import OTPModel from "../models/otp.model";
-import bcrypt from "bcryptjs";
+import * as profileService from "../services/profile.service";
+import * as feedbackService from "../services/feedback.service";
 
 // Update user profile
 export const updateProfile = async (req: AuthRequest, res: Response) => {
@@ -18,26 +16,12 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
     const { firstName, lastName, phoneNumber, profileImage } = req.body;
     const userId = req.user.userId;
 
-    const updateData: any = {};
-    if (firstName) updateData.firstName = firstName;
-    if (lastName) updateData.lastName = lastName;
-    if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
-    if (profileImage !== undefined) updateData.profileImage = profileImage;
-
-    const user = await UserModel.findByIdAndUpdate(
-      userId,
-      updateData,
-      { new: true, runValidators: true }
-    )
-      .populate("role", "roleName")
-      .select("-password");
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
+    const user = await profileService.updateUserProfile(userId, {
+      firstName,
+      lastName,
+      phoneNumber,
+      profileImage,
+    });
 
     res.status(200).json({
       success: true,
@@ -46,7 +30,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error("❌ Update profile error:", error);
-    res.status(400).json({
+    res.status(error.message === "User not found" ? 404 : 400).json({
       success: false,
       message: error.message || "Failed to update profile",
     });
@@ -66,44 +50,7 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
     const { currentPassword, newPassword } = req.body;
     const userId = req.user.userId;
 
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "Current password and new password are required",
-      });
-    }
-
-    if (newPassword.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: "New password must be at least 6 characters long",
-      });
-    }
-
-    // Get user with password
-    const user = await UserModel.findById(userId).select("+password");
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    // Verify current password
-    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
-
-    if (!isPasswordValid) {
-      return res.status(400).json({
-        success: false,
-        message: "Current password is incorrect",
-      });
-    }
-
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
-    await user.save();
+    await profileService.changeUserPassword(userId, currentPassword, newPassword);
 
     res.status(200).json({
       success: true,
@@ -111,7 +58,12 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error("❌ Change password error:", error);
-    res.status(400).json({
+
+    const statusCode =
+      error.message === "User not found" ? 404 :
+      error.message === "Current password is incorrect" ? 400 : 400;
+
+    res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to change password",
     });
@@ -131,22 +83,11 @@ export const submitFeedback = async (req: AuthRequest, res: Response) => {
     const { message, rating, category } = req.body;
     const userId = req.user.userId;
 
-    if (!message) {
-      return res.status(400).json({
-        success: false,
-        message: "Feedback message is required",
-      });
-    }
-
-    const feedback = await FeedbackModel.create({
-      userId,
+    const feedback = await feedbackService.submitFeedback(userId, {
       message,
-      rating: rating || undefined,
-      category: category || "other",
-      status: "pending",
+      rating,
+      category,
     });
-
-    await feedback.populate("userId", "firstName lastName email");
 
     res.status(201).json({
       success: true,
@@ -176,27 +117,11 @@ export const getMyFeedback = async (req: AuthRequest, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
 
-    const feedbacks = await FeedbackModel.paginate(
-      { userId, isDeleted: false },
-      {
-        page,
-        limit,
-        sort: { createdAt: -1 },
-        populate: { path: "userId", select: "firstName lastName email" },
-      }
-    );
+    const result = await feedbackService.getUserFeedback(userId, page, limit);
 
     res.status(200).json({
       success: true,
-      data: {
-        feedbacks: feedbacks.docs,
-        pagination: {
-          total: feedbacks.totalDocs,
-          page: feedbacks.page,
-          pages: feedbacks.totalPages,
-          limit: feedbacks.limit,
-        },
-      },
+      data: result,
     });
   } catch (error: any) {
     console.error("❌ Get feedback error:", error);
@@ -220,27 +145,7 @@ export const toggle2FA = async (req: AuthRequest, res: Response) => {
     const { enabled } = req.body;
     const userId = req.user.userId;
 
-    if (typeof enabled !== "boolean") {
-      return res.status(400).json({
-        success: false,
-        message: "enabled field must be a boolean",
-      });
-    }
-
-    const user = await UserModel.findByIdAndUpdate(
-      userId,
-      { twoFactorEnabled: enabled },
-      { new: true }
-    )
-      .populate("role", "roleName")
-      .select("-password");
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
+    const user = await profileService.toggle2FA(userId, enabled);
 
     res.status(200).json({
       success: true,
@@ -249,7 +154,7 @@ export const toggle2FA = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error("❌ Toggle 2FA error:", error);
-    res.status(400).json({
+    res.status(error.message === "User not found" ? 404 : 400).json({
       success: false,
       message: error.message || "Failed to toggle 2FA",
     });
