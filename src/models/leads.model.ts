@@ -22,7 +22,8 @@ export interface ILead extends Document {
   eventId?: Types.ObjectId;
   isIndependentLead: boolean;
   leadType: "full_scan" | "entry_code" | "manual"; // Type of lead capture
-  scannedCardImage?: string; // Optional - not required for entry_code type
+  scannedCardImage?: string; // @deprecated - kept for backward compatibility
+  images?: string[]; // Array of S3 URLs for lead images (max 3)
   entryCode?: string; // Entry code from organizational QR cards
   ocrText?: string;
   details?: ILeadDetails;
@@ -43,7 +44,17 @@ const LeadSchema = new Schema<ILead>(
       default: "full_scan",
       required: true,
     },
-    scannedCardImage: { type: String }, // No longer required
+    scannedCardImage: { type: String }, // @deprecated - kept for backward compatibility
+    images: {
+      type: [String],
+      default: [],
+      validate: {
+        validator: function(v: string[]) {
+          return v.length <= 3;
+        },
+        message: 'Maximum 3 images allowed per lead'
+      }
+    },
     entryCode: { type: String }, // Entry code from organizational QR cards
     ocrText: { type: String },
     details: {

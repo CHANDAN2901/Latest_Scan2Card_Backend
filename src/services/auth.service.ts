@@ -56,10 +56,25 @@ export const registerUser = async (data: RegisterUserDTO) => {
     companyName: data.companyName,
     isActive: true,
     isDeleted: false,
+    isVerified: false, // User needs to verify via OTP
   });
 
   // Populate role to get role name
   await newUser.populate("role");
+
+  // Send verification OTP automatically after registration
+  const source = newUser.phoneNumber ? "phoneNumber" : "email";
+
+  try {
+    await handleSendVerificationCode({
+      userId: newUser._id.toString(),
+      source,
+    });
+    console.log(`📱 Verification OTP sent to new user ${newUser.email}`);
+  } catch (error: any) {
+    console.error("Failed to send verification OTP:", error.message);
+    // Don't fail registration if OTP sending fails
+  }
 
   return {
     user: {
@@ -72,6 +87,7 @@ export const registerUser = async (data: RegisterUserDTO) => {
       companyName: newUser.companyName,
       isVerified: newUser.isVerified,
     },
+    message: "Registration successful. Please verify your account with the OTP sent to your " + source,
   };
 };
 
@@ -101,6 +117,26 @@ export const loginUser = async (data: LoginData) => {
     }
   }
 
+  // Check if 2FA is enabled - if yes, send OTP and require verification
+  if (user.twoFactorEnabled && !data.skipPasswordCheck) {
+    // Send 2FA OTP
+    const otpResult = await handleSendLoginOTP(user._id.toString());
+
+    // Throw error with special flag to indicate 2FA is required
+    const destination = otpResult.sentVia === "phoneNumber" ? "mobile number" : "email";
+    const error: any = new Error(`2FA required. OTP has been sent to your ${destination}.`);
+    error.requires2FA = true;
+    error.data = {
+      userId: user._id,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      sentTo: otpResult.sentTo,
+      sentVia: otpResult.sentVia,
+      requires2FA: true,
+    };
+    throw error;
+  }
+
   // Generate JWT token
   const token = jwt.sign(
     {
@@ -123,6 +159,7 @@ export const loginUser = async (data: LoginData) => {
       companyName: user.companyName,
       twoFactorEnabled: user.twoFactorEnabled,
       isVerified: user.isVerified,
+      profileImage: user.profileImage || null,
     },
   };
 };
@@ -157,32 +194,31 @@ export const getUserById = async (userId: string) => {
     isActive: user.isActive,
     twoFactorEnabled: user.twoFactorEnabled,
     isVerified: user.isVerified,
+    profileImage: user.profileImage || null,
   };
 };
 
 // OTP-related services
 import OTPModel from "../models/otp.model";
+import {
+  handleSendLoginOTP,
+  handleVerifyLoginOTP,
+  handleSendVerificationCode,
+  handleCheckVerificationCode,
+  handleSendForgotPasswordOTP,
+  handleVerifyForgotPasswordOTP,
+} from "../helpers/otp.helper";
 
 // Verify Login OTP
 export const verifyLoginOTP = async (userId: string, otp: string) => {
   await connectToMongooseDatabase();
 
-  // Find valid OTP
-  const otpRecord = await OTPModel.findOne({
-    userId,
-    otp,
-    purpose: "login",
-    isUsed: false,
-    expiresAt: { $gt: new Date() },
-  });
+  // Use the OTP helper to verify
+  const verification = await handleVerifyLoginOTP(userId, otp);
 
-  if (!otpRecord) {
-    throw new Error("Invalid or expired OTP");
+  if (!verification.isValid) {
+    throw new Error("Invalid OTP");
   }
-
-  // Mark OTP as used
-  otpRecord.isUsed = true;
-  await otpRecord.save();
 
   // Get user and generate token
   const user = await UserModel.findById(userId).populate("role", "name");
@@ -222,23 +258,20 @@ export const sendVerificationOTP = async (userId: string, phoneNumber?: string) 
     await user.save();
   }
 
-  // Generate OTP (using dummy OTP "000000" for testing)
-  const otp = "000000";
+  // Determine source (prefer phone if available, otherwise email)
+  const source = user.phoneNumber ? "phoneNumber" : "email";
 
-  // Save OTP to database (expires in 10 minutes)
-  await OTPModel.create({
-    userId: user._id,
-    otp,
-    purpose: "verification",
-    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+  // Use OTP helper to send verification code
+  const result = await handleSendVerificationCode({
+    userId: user._id.toString(),
+    source,
   });
-
-  console.log(`📱 VERIFICATION OTP for ${user.email}: ${otp}`);
 
   return {
     userId: user._id,
     phoneNumber: user.phoneNumber,
     email: user.email,
+    sentTo: result.sentTo,
   };
 };
 
@@ -246,35 +279,24 @@ export const sendVerificationOTP = async (userId: string, phoneNumber?: string) 
 export const verifyUserOTP = async (userId: string, otp: string) => {
   await connectToMongooseDatabase();
 
-  // Find valid OTP
-  const otpRecord = await OTPModel.findOne({
-    userId,
-    otp,
-    purpose: "verification",
-    isUsed: false,
-    expiresAt: { $gt: new Date() },
-  });
-
-  if (!otpRecord) {
-    throw new Error("Invalid or expired OTP");
-  }
-
-  // Mark OTP as used
-  otpRecord.isUsed = true;
-  await otpRecord.save();
-
-  // Update user's isVerified status
+  // Get user to determine source
   const user = await UserModel.findById(userId);
   if (!user) {
     throw new Error("User not found");
   }
 
-  user.isVerified = true;
-  await user.save();
+  const source = user.phoneNumber ? "phoneNumber" : "email";
+
+  // Use OTP helper to verify code
+  const result = await handleCheckVerificationCode({
+    userId,
+    source,
+    code: otp,
+  });
 
   return {
-    userId: user._id,
-    isVerified: user.isVerified,
+    userId: result.userId,
+    isVerified: result.isVerified,
   };
 };
 
@@ -282,29 +304,10 @@ export const verifyUserOTP = async (userId: string, otp: string) => {
 export const sendForgotPasswordOTP = async (email: string) => {
   await connectToMongooseDatabase();
 
-  // Find user by email
-  const user = await UserModel.findOne({ email, isDeleted: false });
-  if (!user) {
-    throw new Error("User with this email does not exist");
-  }
+  // Use OTP helper to send forgot password OTP
+  const result = await handleSendForgotPasswordOTP(email);
 
-  // Generate OTP (using dummy OTP "000000" for testing)
-  const otp = "000000";
-
-  // Save OTP to database (expires in 10 minutes)
-  await OTPModel.create({
-    userId: user._id,
-    otp,
-    purpose: "forgot_password",
-    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-  });
-
-  console.log(`🔑 FORGOT PASSWORD OTP for ${email}: ${otp}`);
-
-  return {
-    userId: user._id,
-    email: user.email,
-  };
+  return result;
 };
 
 // Reset Password with OTP
@@ -320,22 +323,12 @@ export const resetPasswordWithOTP = async (
     throw new Error("Password must be at least 6 characters long");
   }
 
-  // Find valid OTP
-  const otpRecord = await OTPModel.findOne({
-    userId,
-    otp,
-    purpose: "forgot_password",
-    isUsed: false,
-    expiresAt: { $gt: new Date() },
-  });
+  // Verify OTP using helper
+  const verification = await handleVerifyForgotPasswordOTP(userId, otp);
 
-  if (!otpRecord) {
-    throw new Error("Invalid or expired OTP");
+  if (!verification.isValid) {
+    throw new Error("Invalid OTP");
   }
-
-  // Mark OTP as used
-  otpRecord.isUsed = true;
-  await otpRecord.save();
 
   // Find user and update password
   const user = await UserModel.findById(userId).select("+password");
@@ -357,28 +350,11 @@ export const resetPasswordWithOTP = async (
 export const send2FALoginOTP = async (userId: string) => {
   await connectToMongooseDatabase();
 
-  const user = await UserModel.findById(userId);
-  if (!user) {
-    throw new Error("User not found");
-  }
-
-  // Use bypass OTP "000000" for testing
-  const otp = "000000";
-
-  // Save OTP to database (expires in 10 minutes)
-  await OTPModel.create({
-    userId: user._id,
-    otp,
-    purpose: "login",
-    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-  });
-
-  // Bypass OTP for testing - always use 000000
-  console.log(`🔐 2FA BYPASS OTP for ${user.email}: ${otp}`);
+  // Use OTP helper to send login OTP
+  const result = await handleSendLoginOTP(userId);
 
   return {
     requires2FA: true,
-    userId: user._id,
-    email: user.email,
+    ...result,
   };
 };

@@ -1,19 +1,26 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import VCard from "vcard-parser";
+import puppeteer from "puppeteer";
 // Uncomment and configure if you want LLM fallback
 // import OpenAI from "openai";
 
 // Interface for extracted contact data
 export interface QRContactData {
+  title?: string; // Mr., Ms., Dr., etc.
   firstName?: string;
   lastName?: string;
   company?: string;
   position?: string;
+  department?: string; // Department within company
   email?: string;
   phoneNumber?: string;
+  mobile?: string; // Mobile phone (separate from phoneNumber)
+  fax?: string; // Fax number
   website?: string;
   address?: string;
+  streetName?: string; // Street address (alias for address)
+  zipCode?: string; // Postal code
   city?: string;
   country?: string;
   notes?: string;
@@ -22,12 +29,13 @@ export interface QRContactData {
 // Interface for QR processing result
 export interface QRProcessResult {
   success: boolean;
-  type: "url" | "vcard" | "plaintext" | "entry_code";
+  type: "url" | "vcard" | "plaintext" | "entry_code" | "mailto" | "tel";
   data?: {
     details?: QRContactData;
     entryCode?: string;
     rawData: string;
     confidence: number;
+    rating?: number; // Quality score (1-5)
   };
   error?: string;
 }
@@ -78,6 +86,107 @@ const isEntryCode = (text: string): boolean => {
 };
 
 /**
+ * Validates if text is a valid name (filters out common non-name terms)
+ */
+const isValidName = (text: string): boolean => {
+  if (!text || text.length < 2 || text.length > 100) {
+    return false;
+  }
+
+  // Pattern: alphabetic characters with optional spaces, hyphens, apostrophes
+  const namePattern = /^[A-Za-z]+([\s\-'][A-Za-z]+)*$/;
+  if (!namePattern.test(text)) {
+    return false;
+  }
+
+  // Filter out common non-name terms
+  const invalidTerms = /(download|phone|email|address|website|contact|card|call|directions|fax|mobile|office|home)/i;
+  if (invalidTerms.test(text)) {
+    return false;
+  }
+
+  return true;
+};
+
+/**
+ * Validates if text is a valid company name
+ */
+const isValidCompany = (text: string): boolean => {
+  if (!text || text.length < 2 || text.length > 100) {
+    return false;
+  }
+
+  // Should not contain email addresses
+  if (text.includes('@')) {
+    return false;
+  }
+
+  // Should not start with a phone number
+  if (/^\+?\d/.test(text)) {
+    return false;
+  }
+
+  // Filter out job titles that might be mistaken for company names
+  const jobTitles = /(director|manager|ceo|cto|cfo|engineer|developer|designer|download|phone|email)/i;
+  if (jobTitles.test(text)) {
+    return false;
+  }
+
+  return true;
+};
+
+/**
+ * Validates if text is a valid position/job title
+ */
+const isValidPosition = (text: string): boolean => {
+  if (!text || text.length < 2 || text.length > 100) {
+    return false;
+  }
+
+  // Common position keywords
+  const positionKeywords = [
+    'manager', 'director', 'engineer', 'developer', 'designer', 'analyst',
+    'specialist', 'coordinator', 'officer', 'executive', 'president',
+    'vice', 'assistant', 'associate', 'senior', 'junior', 'lead',
+    'head', 'chief', 'ceo', 'cto', 'cfo', 'coo', 'consultant'
+  ];
+
+  const textLower = text.toLowerCase();
+  return positionKeywords.some(keyword => textLower.includes(keyword));
+};
+
+/**
+ * Calculate rating based on data completeness (1-5 scale)
+ */
+const calculateRating = (contactData: QRContactData): number => {
+  const email = contactData.email;
+  const phone = contactData.phoneNumber || contactData.mobile;
+  const name = contactData.firstName || contactData.lastName;
+  const company = contactData.company;
+  const position = contactData.position;
+
+  // Best: has both contact methods + name + company
+  if (email && phone && name && company) return 5;
+
+  // Great: has both contact methods + name
+  if (email && phone && name) return 4;
+
+  // Good: has one contact method + name + company
+  if ((email || phone) && name && company) return 4;
+
+  // Decent: has one contact method + name
+  if ((email || phone) && name) return 3;
+
+  // Minimal: has at least one contact method
+  if (email || phone) return 3;
+
+  // Poor: missing critical contact info
+  if (name || company) return 2;
+
+  return 1;
+};
+
+/**
  * Extracts email from text using regex
  */
 const extractEmail = (text: string): string | undefined => {
@@ -90,10 +199,92 @@ const extractEmail = (text: string): string | undefined => {
  * Extracts phone number from text using regex
  */
 const extractPhone = (text: string): string | undefined => {
-  // Match various phone formats
-  const phoneRegex = /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/;
-  const match = text.match(phoneRegex);
-  return match ? match[0] : undefined;
+  // Multiple phone regex patterns to catch various formats
+  const phonePatterns = [
+    /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4,5}/, // US/Canada format with extensions
+    /(\+?\d{1,3}[-.\s]?\d{2,4}[-.\s]?\d{2,4}[-.\s]?\d{2,4}[-.\s]?\d{0,4})/, // International format
+    /\+?\d{10,15}/, // Simple international
+    /(\(\d{3}\)\s?\d{3}[-.\s]\d{4})/, // (123) 456-7890
+    /(\d{3}[-.\s]\d{3}[-.\s]\d{4})/, // 123-456-7890 or 123 456 7890
+  ];
+
+  for (const pattern of phonePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      // Clean up the phone number
+      const cleaned = match[0].replace(/[^\d+\-\s()]/g, '').trim();
+      // Validate: should have at least 7 digits, at most 15
+      const digitCount = cleaned.replace(/[^\d]/g, '').length;
+      if (digitCount >= 7 && digitCount <= 15) {
+        return cleaned;
+      }
+    }
+  }
+  return undefined;
+};
+
+/**
+ * Parses mailto: link and extracts contact information
+ */
+const parseMailtoLink = (mailtoLink: string): QRContactData => {
+  const contactData: QRContactData = {};
+
+  try {
+    // Remove 'mailto:' prefix
+    const emailPart = mailtoLink.replace('mailto:', '');
+    const [email, queryString] = emailPart.split('?');
+
+    contactData.email = decodeURIComponent(email.trim());
+
+    // Parse query parameters if present
+    if (queryString) {
+      const params = new URLSearchParams(queryString);
+
+      // Extract subject and body as notes
+      const subject = params.get('subject');
+      const body = params.get('body');
+
+      if (subject || body) {
+        const notes = [];
+        if (subject) notes.push(`Subject: ${subject}`);
+        if (body) notes.push(`Body: ${body}`);
+        contactData.notes = notes.join(' | ');
+      }
+    }
+  } catch (error: any) {
+    console.error('Error parsing mailto link:', error.message);
+  }
+
+  return contactData;
+};
+
+/**
+ * Parses tel: link and extracts phone number
+ */
+const parseTelLink = (telLink: string): QRContactData => {
+  const contactData: QRContactData = {};
+
+  try {
+    // Remove 'tel:' prefix and clean up
+    const phoneNumber = telLink
+      .replace('tel:', '')
+      .replace(/[^\d+\-\s()]/g, '')
+      .trim();
+
+    contactData.phoneNumber = phoneNumber;
+    contactData.mobile = phoneNumber; // Also set as mobile
+  } catch (error: any) {
+    console.error('Error parsing tel link:', error.message);
+  }
+
+  return contactData;
+};
+
+/**
+ * Delay utility for retry logic
+ */
+const delay = (ms: number): Promise<void> => {
+  return new Promise(resolve => setTimeout(resolve, ms));
 };
 
 /**
@@ -127,156 +318,186 @@ const fieldMap: Record<string, keyof QRContactData> = {
   note: "notes",
 };
 
-const scrapeWebpage = async (url: string): Promise<QRContactData> => {
-  try {
-    const response = await axios.get(url, {
-      timeout: 10000,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; Scan2Card/1.0; +http://scan2card.com)",
-      },
-    });
+const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QRContactData> => {
+  let lastError: Error | null = null;
 
-    // Try JSON first
-    if (typeof response.data === "object") {
-      const contactData: QRContactData = {};
-      for (const [key, value] of Object.entries(response.data)) {
-        const mapped = fieldMap[key.toLowerCase()];
-        if (mapped && value) contactData[mapped] = String(value);
+  // Retry logic with exponential backoff
+  for (let attempt = 0; attempt < retryAttempts; attempt++) {
+    try {
+      const response = await axios.get(url, {
+        timeout: 15000,
+        maxRedirects: 10,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+      });
+
+      // Try JSON first
+      if (typeof response.data === "object") {
+        const contactData: QRContactData = {};
+        for (const [key, value] of Object.entries(response.data)) {
+          const mapped = fieldMap[key.toLowerCase()];
+          if (mapped && value) contactData[mapped] = String(value);
+        }
+        // Always store website
+        contactData.website = url;
+        return contactData;
       }
-      // Always store website
+
+      // Otherwise, treat as HTML
+      const $ = cheerio.load(response.data);
+      const contactData: QRContactData = {};
+
+      // ...existing Cheerio extraction code...
+
+      // Parse JSON-LD structured data first
+      $('script[type="application/ld+json"]').each((_, elem) => {
+        try {
+          const htmlContent = $(elem).html();
+          if (!htmlContent) return;
+          const jsonData = JSON.parse(htmlContent);
+          if (jsonData && typeof jsonData === 'object') {
+            // Handle both single objects and arrays
+            const entities = Array.isArray(jsonData) ? jsonData : [jsonData];
+
+            for (const entity of entities) {
+              if (entity['@type'] === 'Person' || entity.type === 'Person') {
+                if (entity.name && !contactData.firstName) {
+                  const nameParts = entity.name.split(' ');
+                  if (nameParts.length >= 2) {
+                    contactData.firstName = nameParts[0];
+                    contactData.lastName = nameParts.slice(1).join(' ');
+                  } else {
+                    contactData.firstName = entity.name;
+                  }
+                }
+                if (entity.givenName) contactData.firstName = entity.givenName;
+                if (entity.familyName) contactData.lastName = entity.familyName;
+                if (entity.jobTitle) contactData.position = entity.jobTitle;
+                if (entity.organization?.name) contactData.company = entity.organization.name;
+                if (entity.email) contactData.email = entity.email;
+                if (entity.telephone) contactData.phoneNumber = entity.telephone;
+                if (entity.address) {
+                  if (entity.address.streetAddress) contactData.address = entity.address.streetAddress;
+                  if (entity.address.addressLocality) contactData.city = entity.address.addressLocality;
+                  if (entity.address.addressCountry) contactData.country = entity.address.addressCountry;
+                  if (entity.address.postalCode) contactData.zipCode = entity.address.postalCode;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // Ignore JSON parsing errors
+        }
+      });
+
+      // Helper to try selectors and map to schema
+      const trySelectors = (selectors: string[], field: keyof QRContactData, maxLen = 200) => {
+        for (const selector of selectors) {
+          const val = $(selector).attr("content") || $(selector).text().trim();
+          if (val && val.length < maxLen) {
+            contactData[field] = val;
+            break;
+          }
+        }
+      };
+
+      // ...existing selector tries...
+
+      // Always store the URL as website
       contactData.website = url;
-      return contactData;
-    }
 
-    // Otherwise, treat as HTML
-    const $ = cheerio.load(response.data);
-    const contactData: QRContactData = {};
+      // ...existing fallback and validation code...
 
-    // Helper to try selectors and map to schema
-    const trySelectors = (selectors: string[], field: keyof QRContactData, maxLen = 200) => {
-      for (const selector of selectors) {
-        const val = $(selector).attr("content") || $(selector).text().trim();
-        if (val && val.length < maxLen) {
-          contactData[field] = val;
-          break;
+      // If we have at least a name, email, or phone, return
+      if (
+        (contactData.firstName && isValidName(contactData.firstName)) ||
+        (contactData.email && contactData.email.length > 3) ||
+        (contactData.phoneNumber && contactData.phoneNumber.length > 5)
+      ) {
+        return contactData;
+      }
+
+      // If Cheerio failed, try Puppeteer as fallback for dynamic content
+      console.log("🌐 Cheerio extraction failed or incomplete, trying Puppeteer for:", url);
+      const browser = await puppeteer.launch({ headless: true });
+      const page = await browser.newPage();
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
+      // Wait for dynamic content to load
+      await new Promise(r => setTimeout(r, 3000));
+      // Extract visible text from main card area
+      const textContent = await page.evaluate(() => {
+        const selectors = [
+          '.vcard', '.card', '.profile', '.container', '.main', '.business-card', 'body'
+        ];
+        let card = null;
+        for (const sel of selectors) {
+          // @ts-ignore
+          card = document.querySelector(sel);
+          // @ts-ignore
+          if (card && card.innerText.trim().length > 0) break;
+        }
+        // @ts-ignore
+        return card ? card.innerText : document.body.innerText;
+      });
+      await browser.close();
+
+      // Try to extract fields from the visible text
+      const fallbackData: QRContactData = {};
+      // Extract email
+      fallbackData.email = extractEmail(textContent);
+      // Extract phone
+      fallbackData.phoneNumber = extractPhone(textContent);
+      // Try to extract name from first line
+      const lines = textContent.split("\n").filter((line: string) => line.trim());
+      if (lines.length > 0) {
+        const firstLine = lines[0].trim();
+        if (
+          firstLine.length < 50 &&
+          !firstLine.includes("@") &&
+          !firstLine.match(/\d{3}/)
+        ) {
+          const nameParts = firstLine.split(" ");
+          if (nameParts.length >= 2) {
+            fallbackData.firstName = nameParts[0];
+            fallbackData.lastName = nameParts.slice(1).join(" ");
+          } else {
+            fallbackData.firstName = firstLine;
+          }
         }
       }
-    };
-
-    trySelectors([
-      'meta[property="og:title"]',
-      'meta[name="author"]',
-      ".name",
-      ".person-name",
-      "h1",
-    ], "firstName", 100);
-
-    // Last name: try to split firstName if possible
-    if (contactData.firstName && !contactData.lastName) {
-      const parts = contactData.firstName.split(" ");
-      if (parts.length >= 2) {
-        contactData.firstName = parts[0];
-        contactData.lastName = parts.slice(1).join(" ");
+      // Try to extract company from second or third line
+      if (lines.length > 1) {
+        const possibleCompany = lines[1].trim();
+        if (isValidCompany(possibleCompany)) {
+          fallbackData.company = possibleCompany;
+        }
+      }
+      // Try to extract position from third or fourth line
+      if (lines.length > 2) {
+        const possiblePosition = lines[2].trim();
+        if (isValidPosition(possiblePosition)) {
+          fallbackData.position = possiblePosition;
+        }
+      }
+      fallbackData.website = url;
+      return fallbackData;
+    } catch (error: any) {
+      lastError = error instanceof Error ? error : new Error('Unknown error');
+      // If this isn't the last attempt, wait with exponential backoff
+      if (attempt < retryAttempts - 1) {
+        const delayMs = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
+        console.log(`⏳ Retry attempt ${attempt + 1}/${retryAttempts} after ${delayMs}ms...`);
+        await delay(delayMs);
       }
     }
-
-    trySelectors([
-      'a[href^="mailto:"]',
-    ], "email", 100);
-    if (!contactData.email) {
-      const bodyText = $("body").text();
-      contactData.email = extractEmail(bodyText);
-    }
-
-    trySelectors([
-      'a[href^="tel:"]',
-    ], "phoneNumber", 100);
-    if (!contactData.phoneNumber) {
-      const bodyText = $("body").text();
-      contactData.phoneNumber = extractPhone(bodyText);
-    }
-
-    trySelectors([
-      'meta[property="og:site_name"]',
-      ".company",
-      ".organization",
-    ], "company", 100);
-
-    trySelectors([".title", ".position", ".job-title"], "position", 100);
-
-    trySelectors([
-      'meta[property="og:street-address"]',
-      'meta[name="address"]',
-      ".address",
-      ".street-address",
-      "address",
-    ], "address", 200);
-
-    trySelectors([
-      'meta[property="og:locality"]',
-      'meta[name="city"]',
-      ".city",
-      ".locality",
-    ], "city", 100);
-
-    trySelectors([
-      'meta[property="og:country-name"]',
-      'meta[name="country"]',
-      ".country",
-      ".country-name",
-    ], "country", 100);
-
-    trySelectors([
-      'meta[name="description"]',
-      ".notes",
-      ".note",
-      "#notes",
-    ], "notes", 500);
-
-    // Always store the URL as website
-    contactData.website = url;
-
-    // Fallback: Try to parse address/city/country from visible text if not found
-    const bodyText = $("body").text();
-    // Address: look for patterns like '123 Main St' or '456 Elm Avenue'
-    if (!contactData.address) {
-      const addressMatch = bodyText.match(/\d+\s+[A-Za-z0-9 .,'#-]+(Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Boulevard|Blvd|Drive|Dr|Block|Sector)/i);
-      if (addressMatch) contactData.address = addressMatch[0];
-    }
-    // City: look for a capitalized word not matching name/phone/email
-    if (!contactData.city) {
-      const cityMatch = bodyText.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g);
-      if (cityMatch) {
-        // Filter out names and known fields
-        const filtered = cityMatch.filter(
-          (c) =>
-            c !== contactData.firstName &&
-            c !== contactData.lastName &&
-            c !== contactData.company &&
-            c !== contactData.position &&
-            (!contactData.phoneNumber || !c.includes(contactData.phoneNumber)) &&
-            (!contactData.email || !c.includes(contactData.email))
-        );
-        if (filtered.length > 0) contactData.city = filtered[0];
-      }
-    }
-    // Country: match only from a known list
-    if (!contactData.country) {
-      const countryMatch = bodyText.match(/\b(?:India|United States|USA|Canada|Australia|UK|United Kingdom|Germany|France|Italy|Spain|China|Japan|Singapore|UAE|United Arab Emirates|[A-Z][a-z]+land)\b/);
-      if (countryMatch) contactData.country = countryMatch[0];
-    }
-
-    // Remove notes from the response
-    if (contactData.notes) {
-      delete contactData.notes;
-    }
-
-    return contactData;
-  } catch (error: any) {
-    console.error("Error scraping webpage:", error.message);
-    // Return at least the URL
-    return { website: url };
   }
+
+  // All retries failed
+  console.error("❌ Error scraping webpage after", retryAttempts, "attempts:", lastError?.message);
+  // Return at least the URL
+  return { website: url };
 };
 
 /**
@@ -417,6 +638,43 @@ export const processQRCode = async (
           entryCode: trimmedText,
           rawData: trimmedText,
           confidence: 1.0,
+          rating: 1,
+        },
+      };
+    }
+
+    // Check if it's a mailto: link
+    if (trimmedText.toLowerCase().startsWith('mailto:')) {
+      console.log("📧 Detected mailto link in QR code");
+      const contactData = parseMailtoLink(trimmedText);
+      const rating = calculateRating(contactData);
+
+      return {
+        success: true,
+        type: "mailto",
+        data: {
+          details: contactData,
+          rawData: trimmedText,
+          confidence: contactData.email ? 1.0 : 0.5,
+          rating,
+        },
+      };
+    }
+
+    // Check if it's a tel: link
+    if (trimmedText.toLowerCase().startsWith('tel:')) {
+      console.log("📞 Detected tel link in QR code");
+      const contactData = parseTelLink(trimmedText);
+      const rating = calculateRating(contactData);
+
+      return {
+        success: true,
+        type: "tel",
+        data: {
+          details: contactData,
+          rawData: trimmedText,
+          confidence: contactData.phoneNumber ? 1.0 : 0.5,
+          rating,
         },
       };
     }
@@ -450,6 +708,7 @@ export const processQRCode = async (
         (v) => v && v.length > 0
       ).length;
       const confidence = Math.min(fieldCount / 10, 1); // Normalize to 0-1 (10 fields)
+      const rating = calculateRating(contactData);
 
       return {
         success: true,
@@ -458,6 +717,7 @@ export const processQRCode = async (
           details: contactData,
           rawData: trimmedText,
           confidence: parseFloat(confidence.toFixed(2)),
+          rating,
         },
       };
     }
@@ -472,6 +732,7 @@ export const processQRCode = async (
         (v) => v && v.length > 0
       ).length;
       const confidence = Math.min(fieldCount / 5, 1);
+      const rating = calculateRating(contactData);
 
       return {
         success: true,
@@ -480,6 +741,7 @@ export const processQRCode = async (
           details: contactData,
           rawData: trimmedText,
           confidence: parseFloat(confidence.toFixed(2)),
+          rating,
         },
       };
     }
@@ -493,6 +755,7 @@ export const processQRCode = async (
       (v) => v && v.length > 0
     ).length;
     const confidence = fieldCount > 0 ? Math.min(fieldCount / 3, 1) : 0.3;
+    const rating = calculateRating(contactData);
 
     return {
       success: true,
@@ -501,6 +764,7 @@ export const processQRCode = async (
         details: contactData,
         rawData: trimmedText,
         confidence: parseFloat(confidence.toFixed(2)),
+        rating,
       },
     };
   } catch (error: any) {

@@ -1,6 +1,9 @@
+// Load environment variables FIRST before any other imports
+import dotenv from "dotenv";
+dotenv.config();
+
 import express, { Application, Request, Response } from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import { connectToMongooseDatabase } from "./config/db.config";
 import { seedRoles } from "./services/role.service";
 import authRoutes from "./routes/auth.routes";
@@ -13,9 +16,6 @@ import profileRoutes from "./routes/profile.routes";
 import feedbackRoutes from "./routes/feedback.routes";
 import teamManagerRoutes from "./routes/teamManager.routes";
 import keepServerActive from "./cron/serverActive";
-
-// Load environment variables
-dotenv.config();
 
 const app: Application = express();
 const PORT = process.env.PORT || 5000;

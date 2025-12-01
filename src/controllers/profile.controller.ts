@@ -4,6 +4,8 @@ import * as profileService from "../services/profile.service";
 import * as feedbackService from "../services/feedback.service";
 
 // Update user profile
+// Supports both JSON and multipart/form-data
+// If file is uploaded, it will be uploaded to S3 automatically
 export const updateProfile = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
@@ -13,14 +15,43 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const { firstName, lastName, phoneNumber, profileImage } = req.body;
+    const { firstName, lastName, phoneNumber } = req.body;
     const userId = req.user.userId;
+
+    let profileImageUrl = req.body.profileImage;
+
+    // If a file is uploaded, upload to S3 first
+    if (req.file) {
+      console.log(`📤 Uploading profile image for user ${userId}`);
+
+      // Validate file type
+      const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      if (!allowedMimeTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Only image files (JPEG, PNG, GIF, WebP) are allowed for profile images',
+        });
+      }
+
+      // Import uploadFileToS3 dynamically
+      const { uploadFileToS3 } = await import('../services/awsS3.service');
+
+      // Upload to S3 (make PUBLIC for profile images so they don't expire)
+      const result = await uploadFileToS3(req.file, {
+        folder: 'profile-images',
+        makePublic: true, // PUBLIC so no expiry!
+        expiresIn: 31536000, // 1 year (only relevant if private)
+      });
+
+      profileImageUrl = result.publicUrl || result.url;
+      console.log(`✅ Profile image uploaded: ${result.key}`);
+    }
 
     const user = await profileService.updateUserProfile(userId, {
       firstName,
       lastName,
       phoneNumber,
-      profileImage,
+      profileImage: profileImageUrl,
     });
 
     res.status(200).json({

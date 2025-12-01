@@ -1185,7 +1185,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"leadId\": \"leadId\",\n  \"title\": \"Product Demo\",\n  \"description\": \"Demonstration of new features\",\n  \"scheduledAt\": \"2024-12-15T10:00:00Z\",\n  \"location\": \"Conference Room A\",\n  \"duration\": 60\n}"
+							"raw": "{\n  \"leadId\": \"leadId\",\n  \"eventId\": \"eventId\",\n  \"title\": \"Product Demo\",\n  \"description\": \"Demonstration of new features\",\n  \"meetingMode\": \"In-Person\",\n  \"date\": \"2024-12-15\",\n  \"startTime\": \"10:00\",\n  \"endTime\": \"11:00\",\n  \"location\": \"Conference Room A\",\n  \"notifyAttendees\": true\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/meetings",

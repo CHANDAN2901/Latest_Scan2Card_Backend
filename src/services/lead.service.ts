@@ -7,7 +7,8 @@ interface CreateLeadData {
   eventId?: string;
   isIndependentLead?: boolean;
   leadType: "full_scan" | "entry_code" | "manual";
-  scannedCardImage?: string;
+  scannedCardImage?: string; // @deprecated - kept for backward compatibility
+  images?: string[]; // Array of S3 URLs (max 3)
   entryCode?: string;
   ocrText?: string;
   details?: any;
@@ -29,7 +30,8 @@ interface UpdateLeadData {
   eventId?: string;
   isIndependentLead?: boolean;
   leadType?: "full_scan" | "entry_code" | "manual";
-  scannedCardImage?: string;
+  scannedCardImage?: string; // @deprecated - kept for backward compatibility
+  images?: string[]; // Array of S3 URLs (max 3)
   entryCode?: string;
   ocrText?: string;
   details?: any;
@@ -44,14 +46,20 @@ export const createLead = async (data: CreateLeadData) => {
     throw new Error("Rating must be between 1 and 5");
   }
 
+  // Validate images array if provided
+  if (data.images && data.images.length > 3) {
+    throw new Error("Maximum 3 images allowed per lead");
+  }
+
   // Validate based on lead type
   if (data.leadType === "entry_code") {
     if (!data.entryCode) {
       throw new Error("Entry code is required for entry_code type leads");
     }
   } else if (data.leadType === "full_scan") {
-    if (!data.scannedCardImage) {
-      throw new Error("Scanned card image is required for full_scan type leads");
+    // Accept either images array or scannedCardImage for backward compatibility
+    if (!data.images && !data.scannedCardImage) {
+      throw new Error("At least one image is required for full_scan type leads");
     }
   }
 
@@ -61,6 +69,7 @@ export const createLead = async (data: CreateLeadData) => {
     isIndependentLead: data.isIndependentLead || !data.eventId,
     leadType: data.leadType,
     scannedCardImage: data.scannedCardImage,
+    images: data.images,
     entryCode: data.entryCode,
     ocrText: data.ocrText,
     details: data.details,
@@ -176,6 +185,11 @@ export const updateLead = async (
     throw new Error("Rating must be between 1 and 5");
   }
 
+  // Validate images array if provided
+  if (data.images && data.images.length > 3) {
+    throw new Error("Maximum 3 images allowed per lead");
+  }
+
   const lead = await LeadModel.findOne({
     _id: id,
     userId,
@@ -187,12 +201,13 @@ export const updateLead = async (
   }
 
   // Update fields
-  if (data.eventId !== undefined) lead.eventId = data.eventId;
+  if (data.eventId !== undefined) lead.eventId = data.eventId as any;
   if (data.isIndependentLead !== undefined)
     lead.isIndependentLead = data.isIndependentLead;
   if (data.leadType !== undefined) lead.leadType = data.leadType;
   if (data.scannedCardImage !== undefined)
     lead.scannedCardImage = data.scannedCardImage;
+  if (data.images !== undefined) lead.images = data.images;
   if (data.entryCode !== undefined) lead.entryCode = data.entryCode;
   if (data.ocrText !== undefined) lead.ocrText = data.ocrText;
   if (data.details !== undefined)

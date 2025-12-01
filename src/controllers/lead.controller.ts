@@ -66,7 +66,8 @@ export const createLead = async (req: AuthRequest, res: Response) => {
       eventId,
       isIndependentLead,
       leadType = "full_scan",
-      scannedCardImage,
+      scannedCardImage, // @deprecated - kept for backward compatibility
+      images, // New: array of S3 URLs
       entryCode,
       ocrText,
       details,
@@ -83,11 +84,36 @@ export const createLead = async (req: AuthRequest, res: Response) => {
         });
       }
     } else if (leadType === "full_scan") {
-      if (!scannedCardImage) {
+      // Accept either images array or scannedCardImage for backward compatibility
+      if (!images && !scannedCardImage) {
         return res.status(400).json({
           success: false,
-          message: "Scanned card image is required for full scan type leads",
+          message: "At least one image is required for full scan type leads",
         });
+      }
+
+      // Validate images array if provided
+      if (images) {
+        if (!Array.isArray(images)) {
+          return res.status(400).json({
+            success: false,
+            message: "Images must be an array",
+          });
+        }
+
+        if (images.length > 3) {
+          return res.status(400).json({
+            success: false,
+            message: "Maximum 3 images allowed per lead",
+          });
+        }
+
+        if (images.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "At least one image is required for full scan type leads",
+          });
+        }
       }
     }
 
@@ -97,6 +123,7 @@ export const createLead = async (req: AuthRequest, res: Response) => {
       isIndependentLead,
       leadType,
       scannedCardImage,
+      images,
       entryCode,
       ocrText,
       details,
@@ -187,6 +214,7 @@ export const updateLead = async (req: AuthRequest, res: Response) => {
       isIndependentLead,
       leadType,
       scannedCardImage,
+      images,
       entryCode,
       ocrText,
       details,
@@ -194,11 +222,29 @@ export const updateLead = async (req: AuthRequest, res: Response) => {
       isActive,
     } = req.body;
 
+    // Validate images array if provided
+    if (images) {
+      if (!Array.isArray(images)) {
+        return res.status(400).json({
+          success: false,
+          message: "Images must be an array",
+        });
+      }
+
+      if (images.length > 3) {
+        return res.status(400).json({
+          success: false,
+          message: "Maximum 3 images allowed per lead",
+        });
+      }
+    }
+
     const lead = await leadService.updateLead(id, userId!, {
       eventId,
       isIndependentLead,
       leadType,
       scannedCardImage,
+      images,
       entryCode,
       ocrText,
       details,
@@ -345,4 +391,162 @@ export const getLeadAnalytics = async (req: AuthRequest, res: Response) => {
       message: error.message || "Internal server error",
     });
   }
+};
+
+// Export Leads to CSV
+export const exportLeads = async (req: AuthRequest, res: Response) => {
+  try {
+    const { type, eventId, search, rating } = req.query;
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "User not authenticated",
+      });
+    }
+
+    // Build query parameters for the getLeads function
+    const queryParams: any = {
+      userId,
+      userRole,
+      limit: "1000", // Export all records
+    };
+
+    if (eventId && eventId !== "all") {
+      queryParams.eventId = eventId;
+    }
+
+    if (search) {
+      queryParams.search = search;
+    }
+
+    if (rating) {
+      queryParams.rating = rating.toString();
+    }
+
+    // Get leads data
+    const result = await leadService.getLeads(queryParams);
+    const leads = result.leads;
+
+    // Filter leads based on export type
+    let filteredLeads = leads;
+    if (type === "entryOnly") {
+      // Only include leads that have entry codes
+      filteredLeads = leads.filter(
+        (lead: any) => lead.entryCode && lead.entryCode.trim() !== ""
+      );
+    }
+
+    // Generate CSV content based on export type
+    let csvContent: string;
+    let filename: string;
+
+    if (type === "entryOnly") {
+      // Entry Code only export
+      csvContent = generateEntryCodeCSV(filteredLeads);
+      filename = `entry-codes-${new Date().toISOString().split("T")[0]}.csv`;
+    } else {
+      // Full data export
+      csvContent = generateFullDataCSV(filteredLeads);
+      filename = `leads-export-${new Date().toISOString().split("T")[0]}.csv`;
+    }
+
+    // Set response headers for CSV download
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
+    res.send(csvContent);
+  } catch (error: any) {
+    console.error("Export error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to export leads data",
+    });
+  }
+};
+
+// Helper: Generate Entry Code CSV
+const generateEntryCodeCSV = (leads: any[]): string => {
+  const headers = ["Entry Code"];
+  const rows = leads.map((lead) => [lead.entryCode]);
+  return generateCSV(headers, rows);
+};
+
+// Helper: Generate Full Data CSV
+const generateFullDataCSV = (leads: any[]): string => {
+  const headers = [
+    "Entry Code",
+    "First Name",
+    "Last Name",
+    "Company",
+    "Position",
+    "Email",
+    "Phone Number",
+    "Website",
+    "City",
+    "Country",
+    "Notes",
+    "Event",
+    "Lead Type",
+    "Rating",
+    "Created Date",
+  ];
+
+  const rows = leads.map((lead) => [
+    lead.entryCode || "",
+    lead.details?.firstName || "",
+    lead.details?.lastName || "",
+    lead.details?.company || "",
+    lead.details?.position || "",
+    lead.details?.email || "",
+    lead.details?.phoneNumber || "",
+    lead.details?.website || "",
+    lead.details?.city || "",
+    lead.details?.country || "",
+    lead.details?.notes || "",
+    lead.eventId && typeof lead.eventId === "object"
+      ? lead.eventId.eventName
+      : lead.isIndependentLead
+      ? "Independent"
+      : "",
+    lead.leadType || "",
+    lead.rating || "",
+    new Date(lead.createdAt).toLocaleDateString(),
+  ]);
+
+  return generateCSV(headers, rows);
+};
+
+// Helper: Generate CSV
+const generateCSV = (headers: string[], rows: string[][]): string => {
+  const csvRows = [
+    headers.map(escapeCSVValue).join(","),
+    ...rows.map((row) => row.map(escapeCSVValue).join(",")),
+  ];
+  return csvRows.join("\n");
+};
+
+// Helper: Escape CSV Value
+const escapeCSVValue = (value: string): string => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  let stringValue = String(value);
+
+  // If value contains comma, quote, or newline, wrap in quotes and escape internal quotes
+  if (
+    stringValue.includes(",") ||
+    stringValue.includes('"') ||
+    stringValue.includes("\n")
+  ) {
+    stringValue = '"' + stringValue.replace(/"/g, '""') + '"';
+  }
+
+  return stringValue;
 };

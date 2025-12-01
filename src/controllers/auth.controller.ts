@@ -79,12 +79,7 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    // Check if 2FA is enabled for this user
     const result = await authService.loginUser({ email, password });
-
-    // If user has 2FA enabled, loginUser will throw or we need to check before
-    // For now, let's check 2FA in the controller since we need the user object
-    // We'll handle this by catching if user has 2FA enabled
 
     res.status(200).json({
       success: true,
@@ -93,11 +88,18 @@ export const login = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     // Special handling for 2FA
-    if (error.message && error.message.includes("2FA")) {
+    if (error.requires2FA || (error.message && error.message.includes("2FA"))) {
+      // Determine where OTP was sent based on error data
+      const sentVia = error.data?.sentVia || (error.data?.phoneNumber ? "phone" : "email");
+      const destination = sentVia === "phoneNumber" || sentVia === "phone"
+        ? "mobile number"
+        : "email";
+
       return res.status(200).json({
         success: true,
-        message: "OTP sent to your email",
-        data: error.data, // This would contain userId and email
+        requires2FA: true,
+        message: `OTP sent to your ${destination}`,
+        data: error.data,
       });
     }
 
