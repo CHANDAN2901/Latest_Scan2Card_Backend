@@ -401,15 +401,22 @@ export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: 
   // Generate OTP
   let otp: string;
   let otpSentStatus = false;
-  let sentTo: string;
+  let sentTo: string = "";
   let sentVia: "phoneNumber" | "email";
 
   if (config.USE_DUMMY_OTP) {
     otp = config.DUMMY_OTP;
     console.log(`🔐 TESTING MODE: Using dummy OTP for forgot password: ${otp}`);
     otpSentStatus = true;
-    sentTo = user.phoneNumber || user.email;
-    sentVia = user.phoneNumber ? "phoneNumber" : "email";
+    if (user.phoneNumber) {
+      sentTo = user.phoneNumber;
+      sentVia = "phoneNumber";
+    } else if (user.email) {
+      sentTo = user.email;
+      sentVia = "email";
+    } else {
+      throw new Error("User does not have a valid phone number or email");
+    }
   } else {
     otp = generateOTP(config.OTP_LENGTH);
 
@@ -423,15 +430,17 @@ export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: 
       }
       sentTo = user.phoneNumber;
       sentVia = "phoneNumber";
-    } else {
-      otpSentStatus = await sendOTPViaEmail(email, otp);
+    } else if (user.email) {
+      otpSentStatus = await sendOTPViaEmail(user.email, otp);
       if (otpSentStatus) {
-        console.log(`✅ Forgot Password OTP sent to email ${email}: ${otp}`);
+        console.log(`✅ Forgot Password OTP sent to email ${user.email}: ${otp}`);
       } else {
-        console.error(`❌ Failed to send OTP to email ${email}`);
+        console.error(`❌ Failed to send OTP to email ${user.email}`);
       }
-      sentTo = email;
+      sentTo = user.email;
       sentVia = "email";
+    } else {
+      throw new Error("User does not have a valid phone number or email");
     }
   }
 
