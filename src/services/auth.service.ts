@@ -301,11 +301,11 @@ export const verifyUserOTP = async (userId: string, otp: string) => {
 };
 
 // Forgot Password - Send OTP
-export const sendForgotPasswordOTP = async (email: string) => {
+export const sendForgotPasswordOTP = async (email?: string, phoneNumber?: string) => {
   await connectToMongooseDatabase();
 
   // Use OTP helper to send forgot password OTP
-  const result = await handleSendForgotPasswordOTP(email);
+  const result = await handleSendForgotPasswordOTP(email, phoneNumber);
 
   return result;
 };

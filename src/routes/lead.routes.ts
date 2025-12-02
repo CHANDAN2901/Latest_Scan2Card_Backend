@@ -14,6 +14,11 @@ import {
 import multer from 'multer';
 const leadUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 3 } });
 import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
+import {
+  scanLimiter,
+  leadWriteLimiter,
+  readLimiter
+} from "../middleware/rateLimiter.middleware";
 
 const router = express.Router();
 
@@ -21,20 +26,23 @@ const router = express.Router();
 router.use(authenticateToken);
 router.use(authorizeRoles("ENDUSER", "EXHIBITOR"));
 
-// Business card scanning route
-router.post("/scan-card", scanCard);
-// QR code scanning route (digital business card)
-router.post("/scan-qr", scanQRCode);
+// Business card scanning routes - High limit for rapid scanning (150/min per user)
+router.post("/scan-card", scanLimiter, scanCard);
+router.post("/scan-qr", scanLimiter, scanQRCode);
 
 // Lead CRUD routes
-// Lead CRUD routes (accept up to 3 images for createLead)
-router.post("/", leadUpload.array('images', 3), createLead);
-router.get("/", getLeads);
-router.get("/analytics", getLeadAnalytics);
-router.get("/stats", getLeadStats);
-router.get("/export", exportLeads);
-router.get("/:id", getLeadById);
-router.put("/:id", updateLead);
-router.delete("/:id", deleteLead);
+// Create lead (with file upload) - Moderate limit (100/min per user)
+router.post("/", leadWriteLimiter, leadUpload.array('images', 3), createLead);
+
+// Read operations - Standard limit (200/min per user)
+router.get("/", readLimiter, getLeads);
+router.get("/analytics", readLimiter, getLeadAnalytics);
+router.get("/stats", readLimiter, getLeadStats);
+router.get("/export", readLimiter, exportLeads);
+router.get("/:id", readLimiter, getLeadById);
+
+// Update/Delete - Moderate limit (100/min per user)
+router.put("/:id", leadWriteLimiter, updateLead);
+router.delete("/:id", leadWriteLimiter, deleteLead);
 
 export default router;

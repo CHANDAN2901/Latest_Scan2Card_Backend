@@ -7,7 +7,6 @@ export const createMeeting = async (req: AuthRequest, res: Response) => {
   try {
     const {
       leadId,
-      eventId,
       title,
       description,
       meetingMode,
@@ -40,7 +39,6 @@ export const createMeeting = async (req: AuthRequest, res: Response) => {
     const meeting = await meetingService.createMeeting({
       userId: userId!,
       leadId,
-      eventId,
       title,
       description,
       meetingMode,
@@ -72,7 +70,6 @@ export const getMeetings = async (req: AuthRequest, res: Response) => {
       page = 1,
       limit = 10,
       leadId,
-      eventId,
       meetingStatus,
       meetingMode,
     } = req.query;
@@ -80,7 +77,6 @@ export const getMeetings = async (req: AuthRequest, res: Response) => {
     const result = await meetingService.getMeetings({
       userId: userId!,
       leadId: leadId as string,
-      eventId: eventId as string,
       meetingStatus: meetingStatus as string,
       meetingMode: meetingMode as string,
       page: Number(page),

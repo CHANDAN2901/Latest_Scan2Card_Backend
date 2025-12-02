@@ -5,6 +5,9 @@ import {
   updateFeedbackStatus,
   getFeedbackStats,
 } from "../controllers/feedback.controller";
+import {
+  adminLimiter
+} from "../middleware/rateLimiter.middleware";
 
 const router = Router();
 
@@ -12,13 +15,9 @@ const router = Router();
 router.use(authenticateToken);
 router.use(authorizeRoles("SUPERADMIN"));
 
-// Get all feedback with filters
-router.get("/", getAllFeedback);
-
-// Get feedback statistics
-router.get("/stats", getFeedbackStats);
-
-// Update feedback status
-router.put("/:id/status", updateFeedbackStatus);
+// Admin limit (300/min per user)
+router.get("/", adminLimiter, getAllFeedback);
+router.get("/stats", adminLimiter, getFeedbackStats);
+router.put("/:id/status", adminLimiter, updateFeedbackStatus);
 
 export default router;

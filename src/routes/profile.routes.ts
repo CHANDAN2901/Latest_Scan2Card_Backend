@@ -8,6 +8,10 @@ import {
   getMyFeedback,
   toggle2FA,
 } from "../controllers/profile.controller";
+import {
+  profileWriteLimiter,
+  readLimiter
+} from "../middleware/rateLimiter.middleware";
 
 const router = Router();
 
@@ -23,20 +27,13 @@ const upload = multer({
 // All routes require authentication
 router.use(authenticateToken);
 
-// Update profile - All authenticated users
-// Supports optional file upload for profile image
-router.put("/", upload.single('profileImage'), updateProfile);
+// Write operations - Moderate limit (30/min per user)
+router.put("/", profileWriteLimiter, upload.single('profileImage'), updateProfile);
+router.post("/change-password", profileWriteLimiter, changePassword);
+router.post("/toggle-2fa", profileWriteLimiter, toggle2FA);
+router.post("/feedback", profileWriteLimiter, submitFeedback);
 
-// Change password - All authenticated users
-router.post("/change-password", changePassword);
-
-// Toggle 2FA - All authenticated users
-router.post("/toggle-2fa", toggle2FA);
-
-// Submit feedback - All authenticated users
-router.post("/feedback", submitFeedback);
-
-// Get my feedback history - All authenticated users
-router.get("/feedback", getMyFeedback);
+// Read operations - Standard limit (200/min per user)
+router.get("/feedback", readLimiter, getMyFeedback);
 
 export default router;

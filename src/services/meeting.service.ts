@@ -4,7 +4,6 @@ import LeadModel from "../models/leads.model";
 interface CreateMeetingData {
   userId: string;
   leadId: string;
-  eventId?: string;
   title: string;
   description?: string;
   meetingMode: string;
@@ -17,7 +16,6 @@ interface CreateMeetingData {
 interface GetMeetingsFilter {
   userId: string;
   leadId?: string;
-  eventId?: string;
   meetingStatus?: string;
   meetingMode?: string;
   page?: number;
@@ -52,7 +50,6 @@ export const createMeeting = async (data: CreateMeetingData) => {
   const meeting = await MeetingModel.create({
     userId: data.userId,
     leadId: data.leadId,
-    eventId: data.eventId,
     title: data.title,
     description: data.description,
     meetingMode: data.meetingMode,
@@ -77,7 +74,6 @@ export const getMeetings = async (filter: GetMeetingsFilter) => {
   const {
     userId,
     leadId,
-    eventId,
     meetingStatus,
     meetingMode,
     page = 1,
@@ -89,10 +85,6 @@ export const getMeetings = async (filter: GetMeetingsFilter) => {
 
   if (leadId) {
     query.leadId = leadId;
-  }
-
-  if (eventId) {
-    query.eventId = eventId;
   }
 
   if (meetingStatus) {

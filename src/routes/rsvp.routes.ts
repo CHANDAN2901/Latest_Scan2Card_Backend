@@ -8,28 +8,24 @@ import {
   validateLicenseKey,
 } from "../controllers/rsvp.controller";
 import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
+import {
+  rsvpWriteLimiter,
+  readLimiter
+} from "../middleware/rateLimiter.middleware";
 
 const router = express.Router();
 
 // All routes require authentication
 router.use(authenticateToken);
 
-// Validate license key (before registration)
-router.post("/validate", validateLicenseKey);
+// Write operations - Moderate limit (50/min per user)
+router.post("/validate", rsvpWriteLimiter, validateLicenseKey);
+router.post("/", rsvpWriteLimiter, createRsvp);
+router.delete("/:rsvpId", rsvpWriteLimiter, cancelRsvp);
 
-// Create RSVP (user registers with license key)
-router.post("/", createRsvp);
-
-// Get user's RSVPs
-router.get("/my-rsvps", getMyRsvps);
-
-// Get single RSVP details
-router.get("/:rsvpId", getRsvpById);
-
-// Cancel RSVP
-router.delete("/:rsvpId", cancelRsvp);
-
-// Get event RSVPs (exhibitors only)
-router.get("/event/:eventId", authorizeRoles("EXHIBITOR"), getEventRsvps);
+// Read operations - Standard limit (200/min per user)
+router.get("/my-rsvps", readLimiter, getMyRsvps);
+router.get("/:rsvpId", readLimiter, getRsvpById);
+router.get("/event/:eventId", authorizeRoles("EXHIBITOR"), readLimiter, getEventRsvps);
 
 export default router;

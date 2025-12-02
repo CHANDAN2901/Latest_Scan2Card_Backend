@@ -150,7 +150,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["auth", "forgot-password"]
 						},
-						"description": "Request password reset OTP. Returns userId for next step. (Test OTP: 000000)"
+						"description": "Initiate password reset process for users who forgot their password.\n\n**Authentication Required:** None (Public endpoint)\n\n**Request Body:**\n- `email` (required, string): User's registered email address\n\n**Process Flow:**\n1. System verifies email exists in database\n2. Generates OTP and sends via SMS to user's registered phone\n3. Returns userId needed for reset-password step\n4. OTP expires after 10 minutes\n\n**Rate Limiting:**\n- 5 requests per hour per email (otpSendResourceLimiter)\n- 500 requests per hour per IP (otpSendIPLimiter)\n\n**Response:**\n- Success: Returns userId and confirmation message\n- Error 400: Invalid email format\n- Error 404: Email not found in system\n- Error 429: Rate limit exceeded (too many attempts)\n\n**Development Mode:**\n- When `USE_DUMMY_OTP=true`, test OTP is 000000\n- No actual SMS sent in development mode\n\n**Next Step:** Use returned userId with OTP in reset-password endpoint"
 					}
 				},
 				{
@@ -172,7 +172,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["auth", "reset-password"]
 						},
-						"description": "Reset password with OTP for users who forgot their password. Requires userId from forgot-password step. (Test OTP: 000000)"
+						"description": "Complete password reset process with OTP verification.\n\n**Authentication Required:** None (Public endpoint)\n\n**Request Body:**\n- `userId` (required, string): User ID returned from forgot-password endpoint\n- `otp` (required, string): 6-digit OTP received via SMS\n- `newPassword` (required, string): New password to set for the account\n\n**Process Flow:**\n1. Verifies OTP matches and hasn't expired (10-minute validity)\n2. Validates new password meets security requirements\n3. Updates user password in database\n4. Invalidates used OTP\n5. Returns success confirmation\n\n**Password Requirements:**\n- Minimum length varies by system configuration\n- Should contain a mix of characters for security\n- Cannot be same as previous password\n\n**Rate Limiting:**\n- 3 requests per hour per email (passwordResetEmailLimiter)\n- 200 requests per hour per IP (passwordResetIPLimiter)\n\n**Response:**\n- Success: Returns success message confirming password reset\n- Error 400: Invalid or expired OTP, or password requirements not met\n- Error 404: User not found\n- Error 429: Rate limit exceeded (too many attempts)\n\n**Development Mode:**\n- When `USE_DUMMY_OTP=true`, test OTP is 000000\n- Useful for testing without SMS integration\n\n**Security Notes:**\n- OTP can only be used once\n- Each OTP expires after 10 minutes\n- Failed attempts count towards rate limiting"
 					}
 				},
 				{
@@ -198,7 +198,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["auth", "change-password"]
 						},
-						"description": "Change password for logged-in users. Requires authentication token and current password verification. No OTP needed."
+						"description": "Change password for authenticated users without OTP verification.\n\n**Authentication Required:** Bearer token\n\n**Request Body:**\n- `currentPassword` (required, string): User's current password for verification\n- `newPassword` (required, string): New password to set\n\n**Process Flow:**\n1. Verifies authentication token is valid\n2. Verifies current password matches user's existing password\n3. Validates new password meets security requirements\n4. Updates password in database\n5. Returns success confirmation\n\n**Password Requirements:**\n- Minimum length varies by system configuration\n- Should contain a mix of characters for security\n- Must be different from current password\n\n**Rate Limiting:** 30 requests per minute per user (profileWriteLimiter)\n\n**Response:**\n- Success: Returns success message confirming password change\n- Error 400: Invalid current password or password requirements not met\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded\n\n**Note:** This endpoint is also available at `/profile/change-password` with identical functionality.\n\n**Use Cases:**\n- User wants to change password while logged in\n- Regular password rotation for security\n- No OTP required since user is already authenticated"
 					}
 				},
 				{
@@ -1338,7 +1338,25 @@
 			"name": "Profile",
 			"item": [
 				{
-					"name": "Update Profile",
+					"name": "Get Profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/auth/profile",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "profile"]
+						},
+						"description": "Get current user profile with full details.\n\n**Authentication Required:** Bearer token in Authorization header\n\n**Response:** Returns user object including:\n- Personal info (firstName, lastName, email, phoneNumber)\n- Account info (role, isVerified, isActive, is2FAEnabled)\n- Company info (companyName, address for exhibitors)\n- Profile image (profileImageUrl if uploaded)\n- Timestamps (createdAt, updatedAt)"
+					}
+				},
+				{
+					"name": "Update Profile (JSON)",
 					"request": {
 						"method": "PUT",
 						"header": [
@@ -1353,14 +1371,67 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"phoneNumber\": \"+1234567890\",\n  \"companyName\": \"Tech Corp\"\n}"
+							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"phoneNumber\": \"+1234567890\",\n  \"companyName\": \"Tech Corp\",\n  \"address\": \"123 Business St, City, Country\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/profile",
 							"host": ["{{baseUrl}}"],
 							"path": ["profile"]
 						},
-						"description": "Update user profile information"
+						"description": "Update user profile information (without file upload).\n\n**Authentication Required:** Bearer token\n\n**Optional Fields:**\n- `firstName` (string): User's first name\n- `lastName` (string): User's last name\n- `phoneNumber` (string): Phone number with country code\n- `companyName` (string): Company name (for exhibitors)\n- `address` (string): Business address\n- `profileImage` (string): Base64 encoded image or S3 URL\n\n**Response:** Returns updated user profile"
+					}
+				},
+				{
+					"name": "Update Profile with Image (Form Data)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "firstName",
+									"value": "John",
+									"type": "text",
+									"description": "First name"
+								},
+								{
+									"key": "lastName",
+									"value": "Doe",
+									"type": "text",
+									"description": "Last name"
+								},
+								{
+									"key": "phoneNumber",
+									"value": "+1234567890",
+									"type": "text",
+									"description": "Phone number"
+								},
+								{
+									"key": "companyName",
+									"value": "Tech Corp",
+									"type": "text",
+									"description": "Company name"
+								},
+								{
+									"key": "profileImage",
+									"type": "file",
+									"src": [],
+									"description": "Profile image file (JPEG, PNG, GIF, WebP - max 10MB)"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/profile",
+							"host": ["{{baseUrl}}"],
+							"path": ["profile"]
+						},
+						"description": "Update user profile with profile image upload.\n\n**Authentication Required:** Bearer token\n\n**Content-Type:** multipart/form-data\n\n**Form Fields:**\n- `firstName` (optional): User's first name\n- `lastName` (optional): User's last name\n- `phoneNumber` (optional): Phone number\n- `companyName` (optional): Company name\n- `address` (optional): Business address\n- `profileImage` (optional): Profile image file\n\n**Image Requirements:**\n- Formats: JPEG, PNG, GIF, WebP\n- Max size: 10MB\n- Uploaded to S3 and URL saved in profile\n\n**Response:** Returns updated user profile with profileImageUrl"
 					}
 				},
 				{
@@ -1386,7 +1457,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["profile", "change-password"]
 						},
-						"description": "Change user password"
+						"description": "Change password for authenticated users.\n\n**Authentication Required:** Bearer token\n\n**Request Body:**\n- `currentPassword` (required, string): User's current password for verification\n- `newPassword` (required, string): New password to set\n\n**Password Requirements:**\n- Minimum length varies by system configuration\n- Should contain a mix of characters for security\n\n**Validation:**\n- Current password must match the user's existing password\n- New password must be different from current password\n- New password must meet security requirements\n\n**Rate Limiting:** 30 requests per minute per user (profileWriteLimiter)\n\n**Response:**\n- Success: Returns success message confirming password change\n- Error 400: Invalid current password or password requirements not met\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded"
 					}
 				},
 				{
@@ -1412,7 +1483,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["profile", "toggle-2fa"]
 						},
-						"description": "Enable or disable two-factor authentication"
+						"description": "Enable or disable two-factor authentication (2FA) for the user account.\n\n**Authentication Required:** Bearer token\n\n**Request Body:**\n- `enable` (required, boolean): Set to `true` to enable 2FA, `false` to disable\n\n**Functionality:**\n- When enabled, user will be required to verify OTP during login\n- OTP is sent via SMS to user's registered phone number\n- Enhances account security by adding second factor verification\n\n**Requirements:**\n- User must have a verified phone number to enable 2FA\n- Only the account owner can toggle their 2FA setting\n\n**Rate Limiting:** 30 requests per minute per user (profileWriteLimiter)\n\n**Response:**\n- Success: Returns updated user profile with new `twoFactorEnabled` status\n- Error 400: Missing or invalid enable parameter\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded\n\n**Use Cases:**\n- Enable 2FA for enhanced security before important operations\n- Disable 2FA temporarily for easier access during testing"
 					}
 				},
 				{
@@ -1438,7 +1509,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["profile", "feedback"]
 						},
-						"description": "Submit user feedback"
+						"description": "Submit feedback, bug reports, or feature requests.\n\n**Authentication Required:** Bearer token\n\n**Request Body:**\n- `category` (required, string): Feedback category\n  - Valid values: \"Bug\", \"Feature Request\", \"Improvement\", \"Question\", \"Other\"\n- `message` (required, string): Detailed feedback message\n- `priority` (optional, string): Priority level\n  - Valid values: \"Low\", \"Medium\", \"High\", \"Critical\"\n  - Default: \"Medium\"\n\n**Functionality:**\n- Feedback is linked to user account for follow-up\n- Admins can view all feedback through admin dashboard\n- Users can retrieve their own feedback history\n- Helps product team improve the application\n\n**Rate Limiting:** 30 requests per minute per user (profileWriteLimiter)\n\n**Response:**\n- Success: Returns created feedback object with ID and timestamp\n- Error 400: Missing required fields (category, message)\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded\n\n**Best Practices:**\n- Provide detailed description for bugs (steps to reproduce, expected vs actual behavior)\n- Include specific examples when suggesting improvements\n- Use appropriate priority levels"
 					}
 				},
 				{
@@ -1452,11 +1523,35 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/profile/feedback",
+							"raw": "{{baseUrl}}/profile/feedback?page=1&limit=10&category=Bug&priority=High",
 							"host": ["{{baseUrl}}"],
-							"path": ["profile", "feedback"]
+							"path": ["profile", "feedback"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number for pagination (default: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Number of items per page (default: 10, max: 100)"
+								},
+								{
+									"key": "category",
+									"value": "Bug",
+									"description": "Filter by category: Bug, Feature Request, Improvement, Question, Other",
+									"disabled": true
+								},
+								{
+									"key": "priority",
+									"value": "High",
+									"description": "Filter by priority: Low, Medium, High, Critical",
+									"disabled": true
+								}
+							]
 						},
-						"description": "Get user's feedback history"
+						"description": "Retrieve all feedback submitted by the authenticated user.\n\n**Authentication Required:** Bearer token\n\n**Query Parameters:**\n- `page` (optional, number): Page number for pagination (default: 1)\n- `limit` (optional, number): Items per page (default: 10, max: 100)\n- `category` (optional, string): Filter by feedback category\n  - Valid values: \"Bug\", \"Feature Request\", \"Improvement\", \"Question\", \"Other\"\n- `priority` (optional, string): Filter by priority level\n  - Valid values: \"Low\", \"Medium\", \"High\", \"Critical\"\n\n**Functionality:**\n- Returns all feedback submitted by the current user\n- Results are paginated for better performance\n- Can filter by category and priority\n- Sorted by creation date (newest first)\n\n**Rate Limiting:** 200 requests per minute per user (readLimiter)\n\n**Response:**\n- Success: Returns array of feedback objects with pagination metadata\n  - Each feedback includes: id, category, message, priority, status, createdAt, updatedAt\n  - Pagination: total, page, limit, totalPages, hasNextPage, hasPrevPage\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded\n\n**Use Cases:**\n- Track status of submitted bug reports\n- Review previously submitted feature requests\n- Check feedback history"
 					}
 				}
 			],

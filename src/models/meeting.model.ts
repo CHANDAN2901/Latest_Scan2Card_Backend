@@ -4,8 +4,7 @@ import mongoosePaginate from "mongoose-paginate-v2";
 // Meeting Interface - For scheduling follow-ups with leads
 export interface IMeeting extends Document {
   userId: Types.ObjectId; // User who created the meeting
-  leadId: Types.ObjectId; // Lead this meeting is for
-  eventId?: Types.ObjectId; // Optional - event context
+  leadId: Types.ObjectId; // Lead this meeting is for (lead already has eventId)
   title: string;
   description?: string;
   meetingMode: "online" | "offline" | "phone";
@@ -23,7 +22,6 @@ const MeetingSchema = new Schema<IMeeting>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "Users", required: true },
     leadId: { type: Schema.Types.ObjectId, ref: "Leads", required: true },
-    eventId: { type: Schema.Types.ObjectId, ref: "Events" },
     title: { type: String, required: true },
     description: { type: String },
     meetingMode: { type: String, enum: ["online", "offline", "phone"], required: true },

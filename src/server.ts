@@ -6,6 +6,7 @@ import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import { connectToMongooseDatabase } from "./config/db.config";
 import { seedRoles } from "./services/role.service";
+import { globalLimiter } from "./middleware/rateLimiter.middleware";
 import authRoutes from "./routes/auth.routes";
 import adminRoutes from "./routes/admin.routes";
 import eventRoutes from "./routes/event.routes";
@@ -20,11 +21,19 @@ import keepServerActive from "./cron/serverActive";
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
 
+// Trust proxy - Required for rate limiting behind proxies/load balancers
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); // Allow up to 10MB for image uploads
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
+// Apply global rate limiter (catch-all protection)
+if (process.env.RATE_LIMIT_ENABLED !== 'false') {
+  app.use(globalLimiter);
+  console.log("✅ Global rate limiting enabled");
+}
 
 // API Routes
 app.use("/api/auth", authRoutes);

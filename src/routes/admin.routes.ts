@@ -14,6 +14,10 @@ import {
   updateKeyPaymentStatus
 } from "../controllers/admin.controller";
 import { authenticateToken, AuthRequest } from "../middleware/auth.middleware";
+import {
+  adminDashboardLimiter,
+  adminLimiter
+} from "../middleware/rateLimiter.middleware";
 
 const router = Router();
 
@@ -25,22 +29,22 @@ const ensureSuperAdmin: RequestHandler = (req, res, next) => {
   return next();
 };
 
-// Dashboard routes
-router.get("/dashboard/stats", authenticateToken, ensureSuperAdmin, getDashboardStats);
-router.get("/dashboard/trends/events", authenticateToken, ensureSuperAdmin, getEventsTrend);
-router.get("/dashboard/trends/leads", authenticateToken, ensureSuperAdmin, getLeadsTrend);
-router.get("/dashboard/trends/keys", authenticateToken, ensureSuperAdmin, getLicenseKeysTrend);
+// Dashboard routes - High limit for frequent polling (500/min per user)
+router.get("/dashboard/stats", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getDashboardStats);
+router.get("/dashboard/trends/events", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getEventsTrend);
+router.get("/dashboard/trends/leads", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getLeadsTrend);
+router.get("/dashboard/trends/keys", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getLicenseKeysTrend);
 
-// Exhibitor CRUD routes
-router.post("/exhibitors", authenticateToken, ensureSuperAdmin, createExhibitor);
-router.get("/exhibitors", authenticateToken, ensureSuperAdmin, getExhibitors);
-router.get("/exhibitors/top-performers", authenticateToken, ensureSuperAdmin, getTopPerformers);
-router.get("/exhibitors/:id", authenticateToken, ensureSuperAdmin, getExhibitorById);
-router.get("/exhibitors/:id/keys", authenticateToken, ensureSuperAdmin, getExhibitorKeys);
-router.put("/exhibitors/:id", authenticateToken, ensureSuperAdmin, updateExhibitor);
-router.delete("/exhibitors/:id", authenticateToken, ensureSuperAdmin, deleteExhibitor);
+// Exhibitor CRUD routes - Admin limit (300/min per user)
+router.post("/exhibitors", authenticateToken, ensureSuperAdmin, adminLimiter, createExhibitor);
+router.get("/exhibitors", authenticateToken, ensureSuperAdmin, adminLimiter, getExhibitors);
+router.get("/exhibitors/top-performers", authenticateToken, ensureSuperAdmin, adminLimiter, getTopPerformers);
+router.get("/exhibitors/:id", authenticateToken, ensureSuperAdmin, adminLimiter, getExhibitorById);
+router.get("/exhibitors/:id/keys", authenticateToken, ensureSuperAdmin, adminLimiter, getExhibitorKeys);
+router.put("/exhibitors/:id", authenticateToken, ensureSuperAdmin, adminLimiter, updateExhibitor);
+router.delete("/exhibitors/:id", authenticateToken, ensureSuperAdmin, adminLimiter, deleteExhibitor);
 
-// License Key Payment Status
-router.put("/events/:eventId/keys/:keyId/payment-status", authenticateToken, ensureSuperAdmin, updateKeyPaymentStatus);
+// License Key Payment Status - Admin limit (300/min per user)
+router.put("/events/:eventId/keys/:keyId/payment-status", authenticateToken, ensureSuperAdmin, adminLimiter, updateKeyPaymentStatus);
 
 export default router;

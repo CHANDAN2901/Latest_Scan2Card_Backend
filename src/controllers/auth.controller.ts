@@ -223,16 +223,19 @@ export const verifyUserOTP = async (req: Request, res: Response) => {
 // Forgot password - Send OTP
 export const forgotPassword = async (req: Request, res: Response) => {
   try {
-    const { email } = req.body;
+    const { email, phoneNumber } = req.body;
 
-    if (!email) {
+    console.log("Forgot password request received:", { email, phoneNumber });
+
+    // Validate that at least one identifier is provided
+    if (!email && !phoneNumber) {
       return res.status(400).json({
         success: false,
-        message: "Email is required",
+        message: "Email or phone number is required",
       });
     }
 
-    const result = await authService.sendForgotPasswordOTP(email);
+    const result = await authService.sendForgotPasswordOTP(email, phoneNumber);
 
     res.status(200).json({
       success: true,

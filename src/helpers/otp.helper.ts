@@ -378,10 +378,24 @@ export const handleVerifyLoginOTP = async (userId: string, code: string) => {
 /**
  * Send OTP for forgot password
  */
-export const handleSendForgotPasswordOTP = async (email: string) => {
-  const user = await UserModel.findOne({ email, isDeleted: false });
+export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: string) => {
+  // Build query to find user by email or phone number
+  const query: any = { isDeleted: false };
+
+  if (email && phoneNumber) {
+    // If both provided, find by either
+    query.$or = [{ email }, { phoneNumber }];
+  } else if (email) {
+    query.email = email;
+  } else if (phoneNumber) {
+    query.phoneNumber = phoneNumber;
+  } else {
+    throw new Error("Email or phone number is required");
+  }
+
+  const user = await UserModel.findOne(query);
   if (!user) {
-    throw new Error("User with this email does not exist");
+    throw new Error("User with this email or phone number does not exist");
   }
 
   // Generate OTP

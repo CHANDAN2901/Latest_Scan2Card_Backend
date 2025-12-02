@@ -10,16 +10,23 @@ import {
   getMemberLeads,
   getAllLeadsForManager,
 } from "../controllers/teamManager.controller";
+import {
+  adminDashboardLimiter,
+  adminLimiter
+} from "../middleware/rateLimiter.middleware";
 
 const router = Router();
 
 // All routes require TEAMMANAGER role
-router.get("/leads/all", authenticateToken, authorizeRoles("TEAMMANAGER"), getAllLeadsForManager);
-router.get("/dashboard/stats", authenticateToken, authorizeRoles("TEAMMANAGER"), getDashboardStats);
-router.get("/leads/graph", authenticateToken, authorizeRoles("TEAMMANAGER"), getLeadsGraph);
-router.get("/team/members", authenticateToken, authorizeRoles("TEAMMANAGER"), getTeamMembers);
-router.get("/team/member/:memberId/leads", authenticateToken, authorizeRoles("TEAMMANAGER"), getMemberLeads);
-router.get("/events", authenticateToken, authorizeRoles("TEAMMANAGER"), getMyEvents);
-router.get("/meetings/team", authenticateToken, authorizeRoles("TEAMMANAGER"), getTeamMeetings);
+// Dashboard routes - High limit for frequent polling (500/min per user)
+router.get("/dashboard/stats", authenticateToken, authorizeRoles("TEAMMANAGER"), adminDashboardLimiter, getDashboardStats);
+router.get("/leads/graph", authenticateToken, authorizeRoles("TEAMMANAGER"), adminDashboardLimiter, getLeadsGraph);
+
+// Other routes - Admin limit (300/min per user)
+router.get("/leads/all", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getAllLeadsForManager);
+router.get("/team/members", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getTeamMembers);
+router.get("/team/member/:memberId/leads", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getMemberLeads);
+router.get("/events", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getMyEvents);
+router.get("/meetings/team", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getTeamMeetings);
 
 export default router;
