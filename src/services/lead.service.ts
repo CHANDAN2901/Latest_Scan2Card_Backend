@@ -53,16 +53,13 @@ export const createLead = async (data: CreateLeadData) => {
   }
 
   // Validate based on lead type
+  // Only entry_code type requires its specific field
   if (data.leadType === "entry_code") {
     if (!data.entryCode) {
       throw new Error("Entry code is required for entry_code type leads");
     }
-  } else if (data.leadType === "full_scan") {
-    // Accept either images array or scannedCardImage for backward compatibility
-    if (!data.images && !data.scannedCardImage) {
-      throw new Error("At least one image is required for full_scan type leads");
-    }
   }
+  // Images are now optional for all lead types including full_scan
 
   const lead = await LeadModel.create({
     userId: data.userId,

@@ -5,6 +5,21 @@ import { processQRCode } from "../services/qrCodeProcessor.service";
 import * as leadService from "../services/lead.service";
 import { uploadFileToS3 } from '../services/awsS3.service';
 
+// Helper: Convert empty strings to undefined
+const sanitizeEmptyStrings = <T extends Record<string, any>>(obj: T): T => {
+  if (!obj || typeof obj !== 'object') return obj;
+
+  const sanitized = { ...obj };
+  for (const key in sanitized) {
+    if (sanitized[key] === '') {
+      sanitized[key] = undefined as any;
+    } else if (typeof sanitized[key] === 'object' && sanitized[key] !== null && !Array.isArray(sanitized[key])) {
+      sanitized[key] = sanitizeEmptyStrings(sanitized[key]);
+    }
+  }
+  return sanitized;
+};
+
 // Scan Business Card
 export const scanCard = async (req: AuthRequest, res: Response) => {
   try {
@@ -99,27 +114,34 @@ export const createLead = async (req: AuthRequest, res: Response) => {
       imageUrls = results.map(r => r.url);
     }
 
+    // Sanitize empty strings to undefined
+    const sanitizedData = sanitizeEmptyStrings({
+      eventId,
+      isIndependentLead,
+      entryCode,
+      ocrText,
+      rating,
+    });
+
     // Validation based on lead type
+    // Only entry_code type requires its specific field
     if (leadType === "entry_code") {
-      if (!entryCode) {
+      if (!sanitizedData.entryCode) {
         return res.status(400).json({ success: false, message: "Entry code is required for entry code type leads" });
       }
-    } else if (leadType === "full_scan") {
-      if (imageUrls.length === 0) {
-        return res.status(400).json({ success: false, message: "At least one image is required for full scan type leads" });
-      }
     }
+    // Images are now optional for all lead types including full_scan
 
     const lead = await leadService.createLead({
       userId: userId!,
-      eventId,
-      isIndependentLead,
+      eventId: sanitizedData.eventId,
+      isIndependentLead: sanitizedData.isIndependentLead,
       leadType,
       images: imageUrls,
-      entryCode,
-      ocrText,
-      details,
-      rating,
+      entryCode: sanitizedData.entryCode,
+      ocrText: sanitizedData.ocrText,
+      details: details ? sanitizeEmptyStrings(details) : undefined,
+      rating: sanitizedData.rating,
     });
 
     return res.status(201).json({
@@ -233,17 +255,29 @@ export const updateLead = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    const lead = await leadService.updateLead(id, userId!, {
+    // Sanitize empty strings to undefined
+    const sanitizedData = sanitizeEmptyStrings({
       eventId,
       isIndependentLead,
       leadType,
       scannedCardImage,
-      images,
       entryCode,
       ocrText,
-      details,
       rating,
       isActive,
+    });
+
+    const lead = await leadService.updateLead(id, userId!, {
+      eventId: sanitizedData.eventId,
+      isIndependentLead: sanitizedData.isIndependentLead,
+      leadType: sanitizedData.leadType,
+      scannedCardImage: sanitizedData.scannedCardImage,
+      images,
+      entryCode: sanitizedData.entryCode,
+      ocrText: sanitizedData.ocrText,
+      details: details ? sanitizeEmptyStrings(details) : undefined,
+      rating: sanitizedData.rating,
+      isActive: sanitizedData.isActive,
     });
 
     return res.status(200).json({
