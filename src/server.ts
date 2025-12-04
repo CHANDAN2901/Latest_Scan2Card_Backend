@@ -17,6 +17,7 @@ import profileRoutes from "./routes/profile.routes";
 import feedbackRoutes from "./routes/feedback.routes";
 import teamManagerRoutes from "./routes/teamManager.routes";
 import keepServerActive from "./cron/serverActive";
+import packageJson from "../package.json";
 
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
@@ -55,12 +56,34 @@ app.get("/health", (req: Request, res: Response) => {
   });
 });
 
-// Root route
-app.get("/", (req: Request, res: Response) => {
-  res.status(200).json({
-    message: "Welcome to Scan2Card API",
-    version: "1.0.0"
-  });
+// Catch-all route for undefined endpoints (including root)
+app.get('*', (req: Request, res: Response) => {
+  const currentTime = new Date().toISOString();
+  const uptime = process.uptime();
+  const uptimeFormatted = `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`;
+
+  const responseData = {
+    success: true,
+    message: "🚀 Welcome to Scan2Card Customer & Dashboard API",
+    status: "✅ Server is up and running",
+    version: packageJson.version,
+    data: {
+      service: "Scan2Card API Server",
+      version: packageJson.version,
+      environment: process.env.NODE_ENV || 'STAGING',
+      timestamp: currentTime,
+      uptime: uptimeFormatted
+    },
+    meta: {
+      author: "Korslet Development Team"
+    }
+  };
+
+  // Set proper headers for formatted JSON
+  res.set('Content-Type', 'application/json');
+
+  // Send beautifully formatted JSON with 3-space indentation
+  res.send(JSON.stringify(responseData, null, 3));
 });
 
 // Initialize database and seed roles
