@@ -7,8 +7,8 @@ import chromium from "@sparticuz/chromium";
 // Uncomment and configure if you want LLM fallback
 // import OpenAI from "openai";
 
-// Detect if we're in production (serverless) or local development
-const isProduction = process.env.NODE_ENV === "production" || process.env.AWS_EXECUTION_ENV || process.env.RENDER;
+// Always use production mode (serverless Chromium) for all environments
+const isProduction = true;
 
 // Interface for extracted contact data
 export interface QRContactData {
