@@ -353,20 +353,22 @@ export const scanQRCode = async (req: AuthRequest, res: Response) => {
         message: "Entry code detected successfully",
         leadType: "entry_code",
         data: {
-          entryCode: result.data?.entryCode,
+          entryCode: result.data?.entryCode || '',
           rawData: result.data?.rawData,
           confidence: result.data?.confidence,
         },
       });
     }
 
-    // For other types (url, vcard, plaintext)
+    // For other types (url, vcard, plaintext, mailto, tel)
     return res.status(200).json({
       success: true,
       message: "QR code processed successfully",
       leadType: "full_scan",
       data: {
         details: result.data?.details,
+        entryCode: result.data?.entryCode || '', // Always include entryCode for consistency
+        rating: result.data?.rating,
         rawData: result.data?.rawData,
         confidence: result.data?.confidence,
       },

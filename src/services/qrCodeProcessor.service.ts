@@ -32,6 +32,26 @@ export interface QRContactData {
   uniqueCode?: string; // Optional entry/unique code (9-15 chars)
 }
 
+/**
+ * Normalizes contact data to ensure all required fields are present with empty strings
+ */
+const normalizeContactData = (data: QRContactData): QRContactData => {
+  return {
+    firstName: data.firstName || '',
+    lastName: data.lastName || '',
+    company: data.company || '',
+    position: data.position || '',
+    email: data.email || '',
+    phoneNumber: data.phoneNumber || '',
+    website: data.website || '',
+    address: data.address || '',
+    city: data.city || '',
+    country: data.country || '',
+    notes: data.notes || '',
+    ...data, // Preserve other fields like uniqueCode, title, department, etc.
+  };
+};
+
 // Interface for QR processing result
 export interface QRProcessResult {
   success: boolean;
@@ -741,7 +761,7 @@ export const processQRCode = async (
     // Check if it's a mailto: link
     if (trimmedText.toLowerCase().startsWith('mailto:')) {
       console.log("📧 Detected mailto link in QR code");
-      const contactData = parseMailtoLink(trimmedText);
+      const contactData = normalizeContactData(parseMailtoLink(trimmedText));
       const rating = calculateRating(contactData);
 
       return {
@@ -749,6 +769,7 @@ export const processQRCode = async (
         type: "mailto",
         data: {
           details: contactData,
+          entryCode: contactData.uniqueCode || '', // Include uniqueCode as entryCode for consistency
           rawData: trimmedText,
           confidence: contactData.email ? 1.0 : 0.5,
           rating,
@@ -759,7 +780,7 @@ export const processQRCode = async (
     // Check if it's a tel: link
     if (trimmedText.toLowerCase().startsWith('tel:')) {
       console.log("📞 Detected tel link in QR code");
-      const contactData = parseTelLink(trimmedText);
+      const contactData = normalizeContactData(parseTelLink(trimmedText));
       const rating = calculateRating(contactData);
 
       return {
@@ -767,6 +788,7 @@ export const processQRCode = async (
         type: "tel",
         data: {
           details: contactData,
+          entryCode: contactData.uniqueCode || '', // Include uniqueCode as entryCode for consistency
           rawData: trimmedText,
           confidence: contactData.phoneNumber ? 1.0 : 0.5,
           rating,
@@ -777,7 +799,7 @@ export const processQRCode = async (
     // Check if it's a URL
     if (isURL(trimmedText)) {
       console.log("🌐 Detected URL in QR code, scraping webpage...");
-      const contactData = await scrapeWebpage(trimmedText);
+      const contactData = normalizeContactData(await scrapeWebpage(trimmedText));
 
       // Optionally: Use LLM to fill missing fields (uncomment and configure)
       /*
@@ -810,6 +832,7 @@ export const processQRCode = async (
         type: "url",
         data: {
           details: contactData,
+          entryCode: contactData.uniqueCode || '', // Include uniqueCode as entryCode for consistency
           rawData: trimmedText,
           confidence: parseFloat(confidence.toFixed(2)),
           rating,
@@ -820,7 +843,7 @@ export const processQRCode = async (
     // Check if it's a vCard
     if (isVCard(trimmedText)) {
       console.log("📇 Detected vCard in QR code, parsing...");
-      const contactData = parseVCard(trimmedText);
+      const contactData = normalizeContactData(parseVCard(trimmedText));
 
       // Calculate confidence based on fields found
       const fieldCount = Object.values(contactData).filter(
@@ -834,6 +857,7 @@ export const processQRCode = async (
         type: "vcard",
         data: {
           details: contactData,
+          entryCode: contactData.uniqueCode || '', // Include uniqueCode as entryCode for consistency
           rawData: trimmedText,
           confidence: parseFloat(confidence.toFixed(2)),
           rating,
@@ -843,7 +867,7 @@ export const processQRCode = async (
 
     // Treat as plain text
     console.log("📄 Detected plain text in QR code, extracting info...");
-    const contactData = parsePlainText(trimmedText);
+    const contactData = normalizeContactData(parsePlainText(trimmedText));
 
     // Calculate confidence
     const fieldCount = Object.values(contactData).filter(
@@ -857,6 +881,7 @@ export const processQRCode = async (
       type: "plaintext",
       data: {
         details: contactData,
+        entryCode: contactData.uniqueCode || '', // Include uniqueCode as entryCode for consistency
         rawData: trimmedText,
         confidence: parseFloat(confidence.toFixed(2)),
         rating,
