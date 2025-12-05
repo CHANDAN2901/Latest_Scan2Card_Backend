@@ -48,11 +48,48 @@ export const getTeamMeetings = async (teamManagerId: string) => {
     userId: { $in: teamMemberIds },
     isDeleted: false,
   })
-    .populate("leadId", "details eventId")
+    .select("_id userId leadId title meetingMode meetingStatus startAt endAt")
+    .populate({
+      path: "leadId",
+      select: "details.firstName details.lastName details.email details.company eventId",
+      populate: {
+        path: "eventId",
+        select: "eventName"
+      }
+    })
     .populate("userId", "firstName lastName email")
-    .populate("eventId", "eventName");
+    .lean();
 
-  return meetings;
+  // Format the response to match frontend expectations
+  const formattedMeetings = meetings.map((meeting: any) => ({
+    _id: meeting._id,
+    userId: {
+      _id: meeting.userId._id,
+      firstName: meeting.userId.firstName,
+      lastName: meeting.userId.lastName,
+      email: meeting.userId.email,
+    },
+    leadId: {
+      _id: meeting.leadId._id,
+      details: {
+        firstName: meeting.leadId.details?.firstName || '',
+        lastName: meeting.leadId.details?.lastName || '',
+        email: meeting.leadId.details?.email || '',
+        company: meeting.leadId.details?.company || '',
+      }
+    },
+    eventId: meeting.leadId.eventId ? {
+      _id: meeting.leadId.eventId._id,
+      eventName: meeting.leadId.eventId.eventName,
+    } : null,
+    title: meeting.title,
+    meetingMode: meeting.meetingMode,
+    meetingStatus: meeting.meetingStatus,
+    startAt: meeting.startAt,
+    endAt: meeting.endAt,
+  }));
+
+  return formattedMeetings;
 };
 
 // Get all leads for manager
@@ -74,10 +111,19 @@ export const getAllLeadsForManager = async (
 
   // Build query
   const query: any = {
-    eventId: { $in: managedEventIds },
     isDeleted: false,
   };
-  if (eventId) query.eventId = eventId;
+
+  // If specific eventId is requested, verify it's in the managed events
+  if (eventId) {
+    if (!managedEventIds.includes(eventId)) {
+      throw new Error("Access denied: Event not managed by this team manager");
+    }
+    query.eventId = eventId;
+  } else {
+    query.eventId = { $in: managedEventIds };
+  }
+
   if (memberId) query.userId = memberId;
 
   const leads = await LeadsModel.find(query).sort({ createdAt: -1 });
