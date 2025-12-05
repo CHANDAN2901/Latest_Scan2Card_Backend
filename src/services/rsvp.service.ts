@@ -144,10 +144,16 @@ export const getUserRsvps = async (
     }
   }
 
-  // Build query for RSVPs
+  // Build query for RSVPs - Filter out expired license keys
+  const now = new Date();
   const rsvpQuery: any = {
     userId: userId,
     isDeleted: false,
+    $or: [
+      { expiresAt: { $exists: false } }, // No expiration (trial events)
+      { expiresAt: null }, // No expiration
+      { expiresAt: { $gte: now } }, // Not expired yet
+    ],
   };
 
   // If search is provided, find matching event IDs first

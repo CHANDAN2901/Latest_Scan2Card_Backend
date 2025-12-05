@@ -130,15 +130,18 @@ export const getDashboardStats = async (teamManagerId: string) => {
     )
   );
 
+  // Get all event IDs managed by this team manager
+  const managedEventIds = events.map((e) => e._id);
+
   // Count team members (ENDUSERs under this team manager)
   const totalMembers = await UserModel.countDocuments({
     exhibitorId: teamManagerId,
     isDeleted: false,
   });
 
-  // Count total leads scanned by team members
+  // Count total leads scanned by team members for this team manager's events only
   const totalLeads = await LeadsModel.countDocuments({
-    userId: { $exists: true },
+    eventId: { $in: managedEventIds },
     isDeleted: false,
   });
 

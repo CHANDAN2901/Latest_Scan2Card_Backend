@@ -13,6 +13,7 @@ export interface IMeeting extends Document {
   endAt: Date; // Meeting end time in UTC
   location?: string; // Address for offline or meeting link for online
   notifyAttendees: boolean;
+  reminderSent: boolean; // Track if reminder notification has been sent
   isActive: boolean;
   isDeleted: boolean;
 }
@@ -30,6 +31,7 @@ const MeetingSchema = new Schema<IMeeting>(
     endAt: { type: Date, required: true },
     location: { type: String },
     notifyAttendees: { type: Boolean, default: false },
+    reminderSent: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false },
   },

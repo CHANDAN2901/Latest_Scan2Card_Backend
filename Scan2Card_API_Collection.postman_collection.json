@@ -1,9 +1,9 @@
 {
 	"info": {
 		"name": "Scan2Card API Collection",
-		"description": "Complete API collection for Scan2Card backend application",
+		"description": "Complete API collection for Scan2Card backend application with Firebase Cloud Messaging support",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"version": "1.0.0"
+		"version": "1.1.0"
 	},
 	"variable": [
 		{
@@ -1879,6 +1879,100 @@
 				}
 			],
 			"description": "Team manager endpoints for managing team and viewing team performance (TEAMMANAGER only)"
+		},
+		{
+			"name": "Notifications (Firebase)",
+			"item": [
+				{
+					"name": "Register FCM Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"fcmToken\": \"your_device_fcm_token_here\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/notifications/register-token",
+							"host": ["{{baseUrl}}"],
+							"path": ["notifications", "register-token"]
+						},
+						"description": "Register a Firebase Cloud Messaging token for the authenticated user. This token will be used to send push notifications to the user's device."
+					}
+				},
+				{
+					"name": "Remove FCM Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"fcmToken\": \"your_device_fcm_token_here\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/notifications/remove-token",
+							"host": ["{{baseUrl}}"],
+							"path": ["notifications", "remove-token"]
+						},
+						"description": "Remove a Firebase Cloud Messaging token from the authenticated user. Use this when user logs out or uninstalls the app."
+					}
+				},
+				{
+					"name": "Get FCM Tokens",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/notifications/tokens",
+							"host": ["{{baseUrl}}"],
+							"path": ["notifications", "tokens"]
+						},
+						"description": "Get all registered FCM tokens for the authenticated user. Useful for debugging."
+					}
+				},
+				{
+					"name": "Send Test Notification",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/notifications/test",
+							"host": ["{{baseUrl}}"],
+							"path": ["notifications", "test"]
+						},
+						"description": "Send a test push notification to the authenticated user's registered devices. Useful for testing Firebase setup."
+					}
+				}
+			],
+			"description": "Firebase Cloud Messaging (FCM) endpoints for managing push notifications (Requires authentication)"
 		},
 		{
 			"name": "Health Check",

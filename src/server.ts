@@ -16,8 +16,11 @@ import meetingRoutes from "./routes/meeting.routes";
 import profileRoutes from "./routes/profile.routes";
 import feedbackRoutes from "./routes/feedback.routes";
 import teamManagerRoutes from "./routes/teamManager.routes";
+import notificationRoutes from "./routes/notification.routes";
 import keepServerActive from "./cron/serverActive";
+import startMeetingReminderCron from "./cron/meetingReminders";
 import packageJson from "../package.json";
+import { initializeFirebase } from "./services/firebase.service";
 
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
@@ -46,6 +49,7 @@ app.use("/api/meetings", meetingRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/team-manager", teamManagerRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // Health check route
 app.get("/health", (req: Request, res: Response) => {
@@ -95,6 +99,9 @@ const initializeApp = async () => {
     // Seed default roles
     await seedRoles();
 
+    // Initialize Firebase for push notifications
+    initializeFirebase();
+
     console.log("✅ App initialized successfully");
   } catch (error) {
     console.error("❌ App initialization failed:", error);
@@ -114,5 +121,6 @@ const startServer = async () => {
 
 startServer();
 keepServerActive();
+startMeetingReminderCron();
 
 export default app;

@@ -6,6 +6,7 @@ import RoleModel from "../models/role.model";
 import mongoose from "mongoose";
 import { customAlphabet } from "nanoid";
 import bcrypt from "bcryptjs";
+import { sendLicenseKeyEmail } from "./email.service";
 
 interface CreateEventData {
   exhibitorId: string;
@@ -130,15 +131,25 @@ export const getEvents = async (
 
   const skip = (page - 1) * limit;
   const events = await EventModel.find(searchQuery)
-    .populate("exhibitorId", "firstName lastName email companyName")
+    .select("-exhibitorId") // Exclude exhibitorId from response
     .skip(skip)
     .limit(limit)
     .sort({ createdAt: -1 });
 
   const total = await EventModel.countDocuments(searchQuery);
 
+  // Add isExpired field to each event
+  const now = new Date();
+  const eventsWithExpiry = events.map((event) => {
+    const eventObj = event.toObject();
+    return {
+      ...eventObj,
+      isExpired: new Date(event.endDate) < now,
+    };
+  });
+
   return {
-    events,
+    events: eventsWithExpiry,
     pagination: {
       total,
       page,
@@ -154,13 +165,19 @@ export const getEventById = async (id: string, exhibitorId: string) => {
     _id: id,
     exhibitorId,
     isDeleted: false,
-  }).populate("exhibitorId", "firstName lastName email companyName");
+  }).select("-exhibitorId"); // Exclude exhibitorId from response
 
   if (!event) {
     throw new Error("Event not found");
   }
 
-  return event;
+  // Add isExpired field
+  const now = new Date();
+  const eventObj = event.toObject();
+  return {
+    ...eventObj,
+    isExpired: new Date(event.endDate) < now,
+  };
 };
 
 // Update event
@@ -262,6 +279,22 @@ export const generateLicenseKeyForEvent = async (
 
   await event.save();
 
+  // Send email with credentials
+  try {
+    await sendLicenseKeyEmail({
+      email: data.email,
+      password: data.email,
+      licenseKey,
+      stallName: data.stallName,
+      eventName: event.eventName,
+      expiresAt: data.expiresAt,
+    });
+    console.log(`✅ License key email sent to ${data.email}`);
+  } catch (emailError: any) {
+    console.error(`❌ Failed to send email to ${data.email}:`, emailError.message);
+    // Don't throw error - license key is still created even if email fails
+  }
+
   return {
     licenseKey,
     stallName: data.stallName,
@@ -361,6 +394,20 @@ export const bulkGenerateLicenseKeys = async (
           password: email,
         },
       });
+
+      // Send email with credentials (non-blocking)
+      sendLicenseKeyEmail({
+        email,
+        password: email,
+        licenseKey,
+        stallName,
+        eventName: event.eventName,
+        expiresAt: expirationDate,
+      })
+        .then(() => console.log(`✅ License key email sent to ${email}`))
+        .catch((emailError: any) =>
+          console.error(`❌ Failed to send email to ${email}:`, emailError.message)
+        );
     } catch (error: any) {
       errors.push({ row: i + 1, error: error.message, email });
     }
@@ -481,7 +528,14 @@ export const getTopEventsByLeads = async (
     { $limit: limit },
   ]);
 
-  return topEvents;
+  // Add isExpired field to each event
+  const now = new Date();
+  const eventsWithExpiry = topEvents.map((event) => ({
+    ...event,
+    isExpired: new Date(event.endDate) < now,
+  }));
+
+  return eventsWithExpiry;
 };
 
 // Get leads trend

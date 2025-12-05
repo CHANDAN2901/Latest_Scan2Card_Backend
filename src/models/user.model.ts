@@ -21,6 +21,7 @@ export interface IUser extends Document {
   isVerified: boolean;
   isActive: boolean;
   isDeleted: boolean;
+  fcmTokens?: string[]; // Firebase Cloud Messaging tokens for push notifications
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -46,6 +47,7 @@ const UserSchema = new Schema<IUser>(
     isVerified: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false },
+    fcmTokens: { type: [String], default: [] }, // Firebase Cloud Messaging tokens
   },
   {
     timestamps: true,
