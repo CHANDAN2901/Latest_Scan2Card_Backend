@@ -6,7 +6,7 @@ import chromium from "@sparticuz/chromium";
 // import OpenAI from "openai";
 
 // Detect environment - use serverless Chromium for production (AWS App Runner, Lambda, etc.)
-const isProduction =true;
+const isProduction = process.env.NODE_ENV === 'production' || process.env.USE_SERVERLESS_CHROMIUM === 'true';
 
 // Interface for extracted contact data
 export interface QRContactData {
@@ -392,6 +392,87 @@ const fieldMap: Record<string, keyof QRContactData> = {
   note: "notes",
 };
 
+const parseQRCodeChimpPayload = (rawScript: string, fallbackUrl: string): QRContactData | null => {
+  if (!rawScript) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(rawScript);
+    const content = Array.isArray(payload?.content) ? payload.content : [];
+    const contactData: QRContactData = {};
+
+    const ensureWebsite = (): string | undefined => {
+      if (payload?.short_url) {
+        const shortUrl: string = payload.short_url;
+        if (shortUrl.startsWith('http')) {
+          return shortUrl;
+        }
+        return `https://linko.page/${shortUrl}`;
+      }
+      return fallbackUrl;
+    };
+
+    const setIfEmpty = (key: keyof QRContactData, value?: string): void => {
+      if (!value) return;
+      if (!contactData[key]) {
+        contactData[key] = value;
+      }
+    };
+
+    const profileComponent = content.find((item: any) => item?.component === 'profile');
+    if (profileComponent?.name) {
+      const nameParts = String(profileComponent.name).trim().split(/\s+/);
+      setIfEmpty('firstName', nameParts[0]);
+      if (nameParts.length > 1) {
+        setIfEmpty('lastName', nameParts.slice(1).join(' '));
+      }
+    }
+
+    setIfEmpty('company', profileComponent?.company);
+    setIfEmpty('position', profileComponent?.desc);
+
+    if (Array.isArray(profileComponent?.contact_shortcuts)) {
+      for (const shortcut of profileComponent.contact_shortcuts) {
+        if (shortcut?.type === 'mobile') {
+          setIfEmpty('phoneNumber', shortcut.value);
+        }
+        if (shortcut?.type === 'email') {
+          setIfEmpty('email', shortcut.value);
+        }
+      }
+    }
+
+    const contactComponent = content.find((item: any) => item?.component === 'contact');
+    if (Array.isArray(contactComponent?.contact_infos)) {
+      for (const info of contactComponent.contact_infos) {
+        if (info?.type === 'email') {
+          setIfEmpty('email', info.email);
+        }
+        if (info?.type === 'number' || info?.type === 'mobile') {
+          setIfEmpty('phoneNumber', info.number ?? info.value);
+        }
+        if (info?.type === 'address') {
+          const street = info.street ?? info.address;
+          const city = info.city ?? info.town;
+          const country = info.country;
+          setIfEmpty('address', street);
+          setIfEmpty('city', city);
+          setIfEmpty('country', country);
+        }
+      }
+    }
+
+    setIfEmpty('website', ensureWebsite());
+
+    const hasData = Object.values(contactData).some((value) => Boolean(value));
+    return hasData ? contactData : null;
+  } catch (error: any) {
+    console.error('Failed to parse embedded QR template payload:', error?.message || error);
+    return null;
+  }
+};
+
 const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QRContactData> => {
   let lastError: Error | null = null;
 
@@ -408,23 +489,34 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
       let browser;
       if (isProduction) {
         // Production: Use puppeteer-core with serverless chromium
-        console.log("🔧 Using serverless Chromium for production");
+        const executablePath = await chromium.executablePath();
+        const chromiumArgs = [
+          ...chromium.args,
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-web-security',
+          '--disable-features=IsolateOrigins,site-per-process',
+        ];
+        console.log(`🔧 Using serverless Chromium for production (path: ${executablePath})`);
         browser = await puppeteerCore.launch({
-          args: [...chromium.args, '--disable-web-security', '--disable-features=IsolateOrigins,site-per-process'],
+          args: chromiumArgs,
           defaultViewport: { width: 1920, height: 1080 },
-          executablePath: await chromium.executablePath(),
-          headless: true,
+          executablePath,
+          headless: (chromium as any).headless ?? true,
         });
       } else {
         // Local: Use regular puppeteer with bundled Chrome
         console.log("🔧 Using local Puppeteer for development");
         browser = await puppeteer.launch({
           headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security'],
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security', '--disable-dev-shm-usage'],
         });
       }
 
       const page = await browser.newPage();
+      await page.setExtraHTTPHeaders({ 'accept-language': 'en-US,en;q=0.9' });
+      await page.setViewport({ width: 1280, height: 720 });
 
       // Set user agent to avoid bot detection
       await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
@@ -562,6 +654,24 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
           '.country'
         ]);
 
+        try {
+          // Attempt to capture embedded QR template payload
+          // @ts-ignore
+          const scripts = Array.from(document.scripts || []) as Array<any>;
+          for (const script of scripts) {
+            const text = script.textContent || '';
+            if (text.includes('__savedQrCodeParams')) {
+              const match = text.match(/__savedQrCodeParams\s*=\s*(\{[\s\S]*?\});?/);
+              if (match && match[1]) {
+                data.qrCodeChimpRaw = match[1];
+                break;
+              }
+            }
+          }
+        } catch (err) {
+          // Ignore script extraction errors
+        }
+
         return data;
       });
 
@@ -572,6 +682,15 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
 
       // Process the extracted data
       const contactData: QRContactData = { website: url };
+      const mergeIfMissing = (source?: QRContactData | null) => {
+        if (!source) return;
+        (Object.keys(source) as (keyof QRContactData)[]).forEach((key) => {
+          const value = source[key];
+          if (value && !contactData[key]) {
+            contactData[key] = value;
+          }
+        });
+      };
 
       // Process JSON-LD if available
       if (extractedData.jsonLd) {
@@ -626,6 +745,16 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
 
       if (extractedData.country) {
         contactData.country = extractedData.country;
+      }
+
+      if (extractedData.qrCodeChimpRaw) {
+        console.log('🧩 Embedded QR template payload detected, parsing as fallback...');
+        mergeIfMissing(parseQRCodeChimpPayload(extractedData.qrCodeChimpRaw, url));
+      }
+
+      const normalizedPageText = extractedData.fullText?.toLowerCase();
+      if (normalizedPageText && normalizedPageText.includes('just a moment') && normalizedPageText.includes('checking if the site connection is secure')) {
+        console.warn('⚠️ Possible bot challenge detected on page content.');
       }
 
       // Fallback: Parse from full text if we don't have enough data
