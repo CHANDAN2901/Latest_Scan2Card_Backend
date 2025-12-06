@@ -12,12 +12,58 @@
 			"type": "string"
 		},
 		{
+			"key": "crawlerUrl",
+			"value": "http://localhost:3001/api",
+			"type": "string"
+		},
+		{
 			"key": "authToken",
 			"value": "",
 			"type": "string"
 		}
 	],
 	"item": [
+		{
+			"name": "Crawler Service",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{crawlerUrl}}/health",
+							"host": ["{{crawlerUrl}}"],
+							"path": ["health"]
+						},
+						"description": "Check crawler service health status"
+					}
+				},
+				{
+					"name": "Crawl URL",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"url\": \"https://example.com/digital-card\"\n}"
+						},
+						"url": {
+							"raw": "{{crawlerUrl}}/crawl",
+							"host": ["{{crawlerUrl}}"],
+							"path": ["crawl"]
+						},
+						"description": "Crawl a URL to extract contact information from digital business cards. This service uses Puppeteer to scrape webpage content and extract structured contact data.\n\n**Request Body:**\n- `url` (required, string): The URL to crawl and extract data from\n\n**Response:**\nReturns extracted contact information including:\n- firstName, lastName\n- company, position, department\n- email, phoneNumber, mobile\n- website, address, streetName, city, country\n- title, uniqueCode\n\n**Rate Limiting:** 100 requests per 15 minutes per IP\n\n**Timeout:** 45 seconds (configurable)\n\n**Use Cases:**\n- Extract contact information from digital business card URLs in QR codes\n- Automated lead capture from web-based business cards\n- Integration with QR code scanning workflow"
+					}
+				}
+			],
+			"description": "Crawler microservice for web scraping digital business cards from URLs"
+		},
 		{
 			"name": "Authentication",
 			"item": [
@@ -1040,7 +1086,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["leads", "scan-card"]
 						},
-						"description": "Scan a business card image using OpenAI Vision API to extract contact information. Returns structured data that can be used to create a lead. Supports JPEG, PNG, and WebP formats (max 20MB)."
+						"description": "Scan a business card image using OpenAI Vision API to extract contact information. Returns structured data that can be used to create a lead.\n\n**Request Body:**\n- `image` (required, string): Base64-encoded image data with data URI prefix\n  - Format: `data:image/jpeg;base64,<base64_string>`\n  - Supported formats: JPEG, PNG, WebP\n  - Max size: 20MB\n\n**Response:**\nReturns extracted contact information:\n- firstName, lastName\n- company, position, department\n- email, phoneNumber, mobile\n- website, address, streetName, city, country\n- title, uniqueCode\n\n**Note:** The following fields are NOT supported and will not be returned:\n- fax\n- zipCode\n- notes"
 					}
 				},
 				{
@@ -1066,7 +1112,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["leads", "scan-qr"]
 						},
-						"description": "Scan a digital business card QR code to extract entry code or contact information. Returns structured data for lead creation."
+						"description": "Scan a digital business card QR code to extract entry code or contact information. Returns structured data for lead creation.\n\n**Request Body:**\n- `qrText` (required, string): The decoded text from QR code\n\n**Processing Flow:**\n1. **vCard Format:** If QR text is vCard format, parses contact fields directly\n2. **URL Format:** If QR text is a URL, sends to CrawlerService to scrape webpage and extract contact data\n3. **Entry Code:** If neither vCard nor URL, treats as entry code for organizational QR cards\n\n**Response:**\nReturns structured contact data:\n- entryCode: Unique entry code (if applicable)\n- contactData: Extracted contact fields\n  - firstName, lastName\n  - company, position, department\n  - email, phoneNumber, mobile\n  - website, address, streetName, city, country\n  - title, uniqueCode\n\n**Crawler Service Integration:**\nWhen QR code contains a URL, this endpoint calls the CrawlerService microservice (port 3001) to:\n- Load the webpage using Puppeteer\n- Extract contact information from HTML\n- Parse structured data (schema.org, microformats)\n- Return normalized contact object\n\n**Note:** The following fields are NOT supported:\n- fax\n- zipCode\n- notes"
 					}
 				},
 				{
@@ -1091,8 +1137,8 @@
 								{ "key": "leadType", "value": "full_scan", "type": "text" },
 								{ "key": "entryCode", "value": "SAMPLE_ENTRY_CODE", "type": "text" },
 								{ "key": "ocrText", "value": "Extracted text from card", "type": "text" },
-								{ "key": "details", "value": "{\"firstName\":\"John\",\"lastName\":\"Doe\",\"email\":\"john.doe@example.com\",\"phoneNumber\":\"+1234567890\",\"company\":\"Acme Corp\",\"position\":\"CEO\",\"website\":\"https://acme.com\",\"address\":\"123 Business St\",\"city\":\"San Francisco\",\"country\":\"USA\",\"notes\":\"Interested in premium package\"}", "type": "text" },
-								{ "key": "rating", "value": "5", "type": "text" },
+								{ "key": "details", "value": "{\"firstName\":\"John\",\"lastName\":\"Doe\",\"email\":\"john.doe@example.com\",\"phoneNumber\":\"+1234567890\",\"company\":\"Acme Corp\",\"position\":\"CEO\",\"website\":\"https://acme.com\",\"address\":\"123 Business St\",\"city\":\"San Francisco\",\"country\":\"USA\"}", "type": "text", "description": "Contact details JSON" },
+								{ "key": "rating", "value": "5", "type": "text", "description": "Lead quality rating (1-5)" },
 								{ "key": "images", "type": "file", "src": ["/path/to/image1.jpg"] },
 								{ "key": "images", "type": "file", "src": ["/path/to/image2.jpg"], "disabled": true },
 								{ "key": "images", "type": "file", "src": ["/path/to/image3.jpg"], "disabled": true }
@@ -1103,7 +1149,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["leads"]
 						},
-						"description": "Create a new lead (ENDUSER or EXHIBITOR). Use scan-card endpoint first to extract data from business card image.\n\n**Trial Event Limit:**\nIf creating a lead with a trial event, users are limited to 5 leads. After reaching this limit, they must join a regular event with a license key to continue creating leads. Check trial status with GET /leads/trial-status."
+						"description": "Create a new lead (ENDUSER or EXHIBITOR). Use scan-card or scan-qr endpoints first to extract data.\n\n**Request Body (multipart/form-data):**\n- `eventId` (optional): Event ID to associate lead with\n- `isIndependentLead` (optional, boolean): Whether lead is independent of events\n- `leadType` (required): Type of lead capture\n  - `full_scan`: Scanned business card with image\n  - `entry_code`: Digital business card with entry code\n  - `manual`: Manually entered lead\n- `entryCode` (optional): Entry code from organizational QR cards\n- `ocrText` (optional): Extracted OCR text from card\n- `details` (optional, JSON string): Contact information object\n  - Available fields: firstName, lastName, company, position, email, phoneNumber, website, address, city, country\n- `rating` (optional, number): Lead quality rating (1-5)\n- `images` (optional, file[]): Business card images (max 3 images)\n\n**Fields NOT Supported in Contact Details:**\n- `notes`: Removed from details schema\n- `fax`: Not supported\n- `zipCode`: Not supported\n\n**Note:** While the QR/card scanning endpoints don't return a `rating` field (you rate leads manually), the lead model itself still supports the `rating` field for tracking lead quality.\n\n**Trial Event Limit:**\nIf creating a lead with a trial event, users are limited to 5 leads. After reaching this limit, they must join a regular event with a license key to continue creating leads. Check trial status with GET /leads/trial-status."
 					}
 				},
 				{
@@ -1117,11 +1163,59 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/leads",
+							"raw": "{{baseUrl}}/leads?page=1&limit=10&period=today&timeZone=Asia/Kolkata",
 							"host": ["{{baseUrl}}"],
-							"path": ["leads"]
+							"path": ["leads"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (default: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Items per page (default: 10)"
+								},
+								{
+									"key": "eventId",
+									"value": "",
+									"description": "Filter by event ID",
+									"disabled": true
+								},
+								{
+									"key": "isIndependentLead",
+									"value": "",
+									"description": "Filter independent leads (true/false)",
+									"disabled": true
+								},
+								{
+									"key": "search",
+									"value": "",
+									"description": "Search by name, company, email, phone",
+									"disabled": true
+								},
+								{
+									"key": "minimal",
+									"value": "",
+									"description": "Return minimal data (true/false)",
+									"disabled": true
+								},
+								{
+									"key": "period",
+									"value": "today",
+									"description": "Filter by time period: today | weekly | earlier",
+									"disabled": true
+								},
+								{
+									"key": "timeZone",
+									"value": "Asia/Kolkata",
+									"description": "IANA timezone (default: Asia/Kolkata for India)",
+									"disabled": true
+								}
+							]
 						},
-						"description": "Get all leads for authenticated user"
+						"description": "Get all leads for authenticated user with pagination and filters.\n\n**Query Parameters:**\n- `page` (number): Page number (default: 1)\n- `limit` (number): Items per page (default: 10)\n- `eventId` (string): Filter by specific event\n- `isIndependentLead` (boolean): Filter independent leads\n- `search` (string): Search by name, company, email, or phone\n- `minimal` (boolean): Return minimal data without populated refs\n- `period` (string): Filter by time period (new feature)\n  - `today`: Leads created today (00:00-23:59 in user's timezone)\n  - `weekly`: Leads created this week excluding today (Monday-Sunday)\n  - `earlier`: Leads created before this week\n- `timeZone` (string): IANA timezone for period filtering (default: Asia/Kolkata)\n  - Examples: Asia/Kolkata, America/New_York, Europe/London, UTC\n\n**Time-based Filtering:**\nThe `period` parameter enables timezone-aware lead filtering:\n- MongoDB stores all timestamps in UTC\n- The API converts your timezone to UTC for accurate queries\n- Week starts on Monday and ends on Sunday\n- Default timezone is Asia/Kolkata (Indian Standard Time)\n\n**Sorting:**\nLeads are sorted by creation date in descending order (newest first).\n\n**Response:**\nReturns paginated list of leads with metadata."
 					}
 				},
 				{
@@ -1230,7 +1324,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@newemail.com\",\n  \"notes\": \"Updated notes\"\n}"
+							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@newemail.com\",\n  \"company\": \"Updated Company Inc\",\n  \"phoneNumber\": \"+1234567890\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/leads/:id",
@@ -1243,7 +1337,7 @@
 								}
 							]
 						},
-						"description": "Update lead information"
+						"description": "Update lead information.\n\n**Request Body (all fields optional):**\n- `firstName`, `lastName`: Contact name\n- `company`, `position`: Company details\n- `email`, `phoneNumber`: Contact information\n- `website`, `address`, `city`, `country`: Additional details\n- `rating`: Lead quality rating (1-5)\n\n**Note:** The following fields are no longer supported:\n- `notes`: Removed from lead details\n- `fax`: Not supported\n- `zipCode`: Not supported"
 					}
 				},
 				{
@@ -1280,7 +1374,7 @@
 								}
 							]
 						},
-						"description": "Export leads to CSV with full data (15 columns).\n\n**Authentication Required:** Bearer token\n\n**Roles:** ENDUSER or EXHIBITOR\n\n**What Data is Exported:**\n- **ENDUSER**: Exports all leads scanned by the authenticated user\n- **EXHIBITOR**: Exports all leads from events owned by the exhibitor\n\n**Query Parameters:**\n- `eventId` (optional): Filter by specific event ID, or use 'all' for all events\n- `search` (optional): Search filter for name, company, email, or phone\n- `rating` (optional): Filter by rating (1-5)\n\n**Export Format:** CSV file with 15 columns:\n1. Entry Code\n2. First Name\n3. Last Name\n4. Company\n5. Position\n6. Email\n7. Phone Number\n8. Website\n9. City\n10. Country\n11. Notes\n12. Event\n13. Lead Type\n14. Rating\n15. Created Date\n\n**Response:**\n- Content-Type: text/csv\n- File download with name: leads-export-YYYY-MM-DD.csv\n- Maximum 1000 leads per export\n\n**Use Cases:**\n- Export all leads for CRM import\n- Download leads for offline analysis\n- Backup lead data\n- Share leads with team members"
+						"description": "Export leads to CSV with full data.\n\n**Authentication Required:** Bearer token\n\n**Roles:** ENDUSER or EXHIBITOR\n\n**What Data is Exported:**\n- **ENDUSER**: Exports all leads scanned by the authenticated user\n- **EXHIBITOR**: Exports all leads from events owned by the exhibitor\n\n**Query Parameters:**\n- `eventId` (optional): Filter by specific event ID, or use 'all' for all events\n- `search` (optional): Search filter for name, company, email, or phone\n- `rating` (optional): Filter by rating (1-5)\n\n**Export Format:** CSV file with 13 columns:\n1. Entry Code\n2. First Name\n3. Last Name\n4. Company\n5. Position\n6. Email\n7. Phone Number\n8. Website\n9. City\n10. Country\n11. Event\n12. Lead Type\n13. Rating\n14. Created Date\n\n**Removed Columns (compared to previous versions):**\n- Notes (field removed from schema)\n- Fax (not supported)\n- ZipCode (not supported)\n\n**Response:**\n- Content-Type: text/csv\n- File download with name: leads-export-YYYY-MM-DD.csv\n- Maximum 1000 leads per export\n\n**Use Cases:**\n- Export all leads for CRM import\n- Download leads for offline analysis\n- Backup lead data\n- Share leads with team members"
 					}
 				},
 				{

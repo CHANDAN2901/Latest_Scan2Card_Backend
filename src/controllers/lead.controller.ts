@@ -157,6 +157,8 @@ export const getLeads = async (req: AuthRequest, res: Response) => {
       rating,
       search,
       minimal,
+      period, // New: "today" | "weekly" | "earlier"
+      timeZone = "Asia/Kolkata", // New: user's timezone
     } = req.query;
 
     const result = await leadService.getLeads({
@@ -169,6 +171,8 @@ export const getLeads = async (req: AuthRequest, res: Response) => {
       rating: rating as string,
       search: search as string,
       minimal: minimal === 'true',
+      period: period as "today" | "weekly" | "earlier" | undefined,
+      timeZone: timeZone as string,
     });
 
     return res.status(200).json({

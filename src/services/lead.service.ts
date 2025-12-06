@@ -3,6 +3,7 @@ import EventModel from "../models/event.model";
 import UserModel from "../models/user.model";
 import mongoose from "mongoose";
 import { fillMissingDates, fillMissingMonths, fillMissingYears } from "../helpers/dateStats.helper";
+import { getDateRangesByPeriod } from "../utils/dateRange.util";
 
 interface CreateLeadData {
   userId: string;
@@ -27,6 +28,8 @@ interface GetLeadsFilter {
   rating?: string;
   search?: string;
   minimal?: boolean;
+  period?: "today" | "weekly" | "earlier"; // New: time-based filter
+  timeZone?: string; // New: user's timezone (e.g., "Asia/Kolkata")
 }
 
 interface UpdateLeadData {
@@ -122,6 +125,8 @@ export const getLeads = async (filter: GetLeadsFilter) => {
     rating,
     search,
     minimal = false,
+    period,
+    timeZone = "Asia/Kolkata", // Default to Indian timezone
   } = filter;
 
   // Build filter query based on role
@@ -153,6 +158,12 @@ export const getLeads = async (filter: GetLeadsFilter) => {
     query.rating = parseInt(rating);
   }
 
+  // Time-based filtering
+  if (period) {
+    const dateRanges = getDateRangesByPeriod(period, timeZone);
+    query.createdAt = dateRanges;
+  }
+
   // Search in details
   if (search) {
     query.$or = [
@@ -167,7 +178,7 @@ export const getLeads = async (filter: GetLeadsFilter) => {
   const options: any = {
     page: parseInt(page.toString()),
     limit: parseInt(limit.toString()),
-    sort: { createdAt: 1 }, // Ascending order (oldest first)
+    sort: { createdAt: -1 }, // Descending order (newest first)
   };
 
   // If minimal mode, only select ID and name fields, skip populates
